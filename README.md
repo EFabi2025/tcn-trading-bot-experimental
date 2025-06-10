@@ -1,158 +1,151 @@
-# 🤖 TCN Anti-Bias Fixed - Trading Bot Profesional
+# 🧪 TCN Trading Bot - **PROYECTO EXPERIMENTAL**
 
-## ✅ Estado del Proyecto - VERSIÓN ACTUALIZADA
+> **⚠️ IMPORTANTE**: Este es un proyecto **puramente educacional y experimental**. No está destinado para uso en producción real ni trading con dinero real. Su propósito es el aprendizaje y la experimentación con tecnologías de ML y trading.
 
-### 🏗️ ARQUITECTURA PROFESIONAL IMPLEMENTADA
+## 🎓 Objetivo Educacional
+
+Este proyecto explora la implementación de un trading bot profesional combinando:
+- **Machine Learning**: Redes neuronales TCN (Temporal Convolutional Networks)
+- **Arquitectura SOLID**: Principios de ingeniería de software profesional
+- **Gestión de Riesgo**: Implementación de sistemas de control de riesgo
+- **Buenas Prácticas**: Logging estructurado, validación de datos, testing
+
+## ✅ Estado del Proyecto - **EXPERIMENTAL**
+
+### 🏗️ ARQUITECTURA IMPLEMENTADA (Para Aprendizaje)
 
 - **✅ Interfaces SOLID**: Contratos definidos siguiendo principios SOLID
 - **✅ Schemas Pydantic**: Validación estricta de datos con tipos seguros
 - **✅ Configuración Centralizada**: BaseSettings con validación automática
 - **✅ Logging Estructurado**: Structlog con contexto profesional
 - **✅ Modelos SQLAlchemy**: Base de datos con integridad referencial
-- **✅ Risk Manager**: Servicio profesional de gestión de riesgos
+- **✅ Risk Manager**: Servicio experimental de gestión de riesgos
 
-### 📋 COMPONENTES COMPLETADOS
+### 📋 COMPONENTES EDUCACIONALES
 
-#### 🔧 Core Infrastructure
-- `src/interfaces/trading_interfaces.py` - Interfaces para todos los servicios
-- `src/schemas/trading_schemas.py` - Validación Pydantic completa
-- `src/core/config.py` - Configuración centralizada con BaseSettings
-- `src/core/logging_config.py` - Logging estructurado profesional
-- `src/database/models.py` - Modelos SQLAlchemy optimizados
+#### 🔧 Core Infrastructure (Para Estudio)
+- `src/interfaces/trading_interfaces.py` - Interfaces y contratos
+- `src/schemas/trading_schemas.py` - Validación Pydantic
+- `src/core/config.py` - Configuración centralizada
+- `src/core/logging_config.py` - Logging estructurado
+- `src/database/models.py` - Modelos SQLAlchemy
 
-#### 🛡️ Risk Management
-- `src/services/risk_manager.py` - Gestión avanzada de riesgos
+#### 🛡️ Risk Management (Experimental)
+- `src/services/risk_manager.py` - Gestión de riesgos educacional
   - ✅ Validación multi-capa de órdenes
-  - ✅ Cálculo inteligente de posiciones (Kelly Criterion)
+  - ✅ Cálculo de posiciones (Kelly Criterion)
   - ✅ Circuit breakers automáticos
   - ✅ Límites de pérdida diaria
-  - ✅ Cooldown entre órdenes
   - ✅ Análisis de correlación
 
-### 🚀 Configuración Rápida
+### 🚀 Configuración para Experimentación
 
 ```bash
 # 1. Activar entorno virtual
 source .venv/bin/activate
 
-# 2. Instalar nuevas dependencias
+# 2. Instalar dependencias
 pip install -r requirements.txt
 
-# 3. Configurar variables de entorno
+# 3. Configurar variables (SOLO TESTNET)
 cp .env.example .env
-# Editar .env con tus credenciales de Binance
+# Editar .env - MANTENER DRY_RUN=true
 
-# 4. Verificar modelo TCN existente
+# 4. Verificar modelo TCN experimental
 python -c "
 import tensorflow as tf
 model = tf.keras.models.load_model('models/tcn_anti_bias_fixed.h5')
-print(f'✅ Modelo OK: {model.count_params():,} parámetros')
+print(f'✅ Modelo experimental: {model.count_params():,} parámetros')
 "
 ```
 
-### 📁 Estructura Actualizada
+### 📁 Estructura del Proyecto Experimental
 
 ```
 .
-├── src/                          # Código fuente
-│   ├── interfaces/               # Interfaces y contratos
-│   │   └── trading_interfaces.py
+├── src/                          # Código experimental
+│   ├── interfaces/               # Interfaces SOLID
 │   ├── schemas/                  # Validación Pydantic
-│   │   └── trading_schemas.py
-│   ├── core/                     # Configuración y utilidades
-│   │   ├── config.py
-│   │   └── logging_config.py
-│   ├── database/                 # Modelos y persistencia
-│   │   └── models.py
-│   ├── services/                 # Servicios de negocio
-│   │   └── risk_manager.py
-│   └── models/                   # Modelos ML existentes
-│       ├── tcn_anti_bias_model.py
-│       ├── tcn_features_engineering.py
-│       ├── regime_classifier.py
-│       └── train_anti_bias_tcn_fixed.py
-├── models/                       # Modelos entrenados
-│   ├── tcn_anti_bias_fixed.h5    # ✅ Modelo principal
-│   └── feature_scalers_fixed.pkl
-├── database/                     # Base de datos
-├── logs/                         # Logs estructurados
-├── tests/                        # Tests unitarios
+│   ├── core/                     # Configuración
+│   ├── database/                 # Modelos experimentales
+│   ├── services/                 # Servicios de prueba
+│   └── models/                   # Modelos ML experimentales
+├── models/                       # Modelos entrenados (1.1MB)
+├── tests/                        # Tests educacionales
 ├── .env.example                  # Configuración de ejemplo
-└── requirements.txt              # Dependencias actualizadas
+└── requirements.txt              # Dependencias
 ```
 
-## 🔜 Próximos Pasos Críticos
+## 🔜 Experimentos Planificados
 
-### 1. **Implementar Servicios Restantes** (Prioridad ALTA)
-- [ ] `BinanceClient` - Cliente de trading con Binance API
-- [ ] `MLPredictor` - Integración del modelo TCN existente
-- [ ] `MarketDataProvider` - Proveedor de datos de mercado
-- [ ] `TradingOrchestrator` - Coordinador principal
+### 1. **Servicios de Trading** (Experimentales)
+- [ ] `BinanceClient` - Cliente de prueba con Binance API
+- [ ] `MLPredictor` - Integración experimental del modelo TCN
+- [ ] `MarketDataProvider` - Proveedor de datos para experimentos
 
-### 2. **Configurar Base de Datos** (Prioridad ALTA)
-- [ ] Crear migraciones con Alembic
-- [ ] Configurar conexión SQLAlchemy
-- [ ] Implementar repositories
+### 2. **Base de Datos** (Para Aprendizaje)
+- [ ] Migraciones con Alembic
+- [ ] Repositories experimentales
 
-### 3. **Tests Unitarios** (Prioridad MEDIA)
-- [ ] Tests para Risk Manager
-- [ ] Tests para configuración
-- [ ] Tests de integración
+### 3. **Testing** (Educacional)
+- [ ] Tests unitarios como ejemplos
+- [ ] Tests de integración educacionales
 
-### 4. **Integración del Modelo** (Prioridad ALTA)
-- [ ] Wrapper para modelo TCN existente
-- [ ] Feature engineering pipeline
-- [ ] Predicción en tiempo real
+## 🛡️ Características de Seguridad (Experimentales)
 
-## 🛡️ Características de Seguridad Implementadas
-
-### Risk Management Avanzado
+### Protecciones Implementadas
+- **DRY RUN**: Por defecto, NO ejecuta trades reales
+- **TESTNET**: Solo opera en entornos de prueba
 - **Circuit Breakers**: Parada automática ante riesgos
-- **Position Sizing**: Kelly Criterion con ajuste por volatilidad
-- **Daily Loss Limits**: Límites diarios configurables
-- **Order Cooldown**: Prevención de trading excesivo
-- **Multi-layer Validation**: 6 capas de validación por orden
+- **Validación Multi-capa**: 6 niveles de validación
+- **Logging Completo**: Trazabilidad de todas las operaciones
 
-### Logging y Monitoreo
-- **Structured Logging**: JSON con contexto completo
-- **Risk Events**: Tracking de eventos críticos
-- **Performance Metrics**: Métricas de trading y modelo
-- **Error Handling**: Manejo robusto de errores
-
-### Configuración Segura
-- **Environment Variables**: Configuración desde .env
-- **Secret Management**: Credenciales encriptadas
-- **Validation**: Validación estricta de parámetros
-- **Multi-Environment**: Desarrollo/Staging/Producción
-
-## ⚠️ Configuración de Seguridad OBLIGATORIA
+## ⚠️ **CONFIGURACIÓN OBLIGATORIA DE SEGURIDAD**
 
 ```bash
-# En .env - CONFIGURAR ANTES DE USAR
-DRY_RUN=true                    # IMPORTANTE: Mantener en true para pruebas
-BINANCE_TESTNET=true           # Usar testnet de Binance
-ENVIRONMENT=development        # No usar production hasta validar
-MAX_POSITION_PERCENT=0.02      # Máximo 2% por posición
-MAX_DAILY_LOSS_PERCENT=0.05    # Máximo 5% pérdida diaria
+# En .env - CONFIGURACIÓN EXPERIMENTAL
+DRY_RUN=true                     # 🚨 NUNCA cambiar a false
+BINANCE_TESTNET=true            # 🚨 SOLO testnet
+ENVIRONMENT=development         # 🚨 NUNCA production
+MAX_POSITION_PERCENT=0.01       # 🚨 Máximo 1% experimental
+MAX_DAILY_LOSS_PERCENT=0.02     # 🚨 Máximo 2% de prueba
 ```
 
-## 🎯 Metodología de Desarrollo
+## 📚 Propósito Educacional
 
-### Principios SOLID Aplicados
-- **Single Responsibility**: Cada clase tiene una responsabilidad
-- **Open/Closed**: Extensible sin modificar código existente
-- **Liskov Substitution**: Interfaces intercambiables
-- **Interface Segregation**: Interfaces específicas y cohesivas
-- **Dependency Inversion**: Inyección de dependencias
+### Tecnologías Exploradas
+- **TensorFlow**: Redes neuronales TCN
+- **Pydantic**: Validación de datos robusta
+- **SQLAlchemy**: ORM y gestión de base de datos
+- **Structlog**: Logging estructurado profesional
+- **AsyncIO**: Programación asíncrona
+- **SOLID Principles**: Arquitectura limpia
 
-### Patrones Implementados
-- **Repository Pattern**: Acceso a datos abstracto
+### Patrones de Diseño Implementados
+- **Repository Pattern**: Abstracción de datos
 - **Strategy Pattern**: Algoritmos intercambiables
 - **Observer Pattern**: Notificaciones asíncronas
-- **Factory Pattern**: Creación controlada de objetos
+- **Factory Pattern**: Creación controlada
+
+## 🎯 Disclaimer
+
+> **⚠️ AVISO IMPORTANTE**: 
+> 
+> Este proyecto es **únicamente para fines educacionales y experimentales**. 
+> 
+> - ❌ **NO** usar con dinero real
+> - ❌ **NO** es asesoramiento financiero
+> - ❌ **NO** garantiza rentabilidad
+> - ✅ **SÍ** es para aprender programación
+> - ✅ **SÍ** es para experimentar con ML
+> - ✅ **SÍ** es para practicar buenas prácticas de código
+
+## 📄 Licencia
+
+MIT License - Proyecto educacional abierto para el aprendizaje.
 
 ---
 
-**🎯 OBJETIVO ACTUAL**: Implementar cliente de Binance y orquestador principal para completar el sistema end-to-end
-
-**🚨 ESTADO**: Base sólida completada, listo para servicios de trading
+**🎯 OBJETIVO**: Aprender sobre ML, trading algorítmico y arquitectura de software
+**🧪 ESTADO**: Experimental - Solo para educación y experimentación
+**📖 PROPÓSITO**: Compartir conocimiento y técnicas de programación
