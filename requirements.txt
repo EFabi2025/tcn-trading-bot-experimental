@@ -1,0 +1,70 @@
+# Dependencias principales para TCN Trading Bot
+# Versiones estables probadas para macOS Apple Silicon
+
+# TensorFlow para Apple Silicon
+tensorflow-macos==2.15.0
+tensorflow-metal==1.1.0
+
+# Dependencias core
+numpy==1.26.4
+pandas==2.2.2
+scikit-learn==1.5.1
+
+# Trading y datos
+python-binance==1.0.19
+ccxt==4.3.74
+
+# Almacenamiento y serialización
+h5py==3.11.0
+joblib==1.4.2
+
+# === NUEVAS DEPENDENCIAS PARA ARQUITECTURA PROFESIONAL ===
+
+# Configuración y validación
+python-dotenv==1.0.1
+pydantic==2.5.3
+pydantic[email]==2.5.3
+
+# Base de datos ORM
+SQLAlchemy==2.0.25
+alembic==1.13.1
+
+# Logging estructurado
+structlog==23.2.0
+
+# Async y concurrencia
+asyncio-mqtt==0.16.2
+aiohttp==3.9.1
+asyncpg==0.29.0  # Para PostgreSQL async
+
+# Testing profesional
+pytest==7.4.4
+pytest-asyncio==0.23.2
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+
+# Type checking y calidad de código
+mypy==1.8.0
+black==23.12.1
+isort==5.13.2
+flake8==7.0.0
+
+# Monitoreo y observabilidad
+prometheus-client==0.19.0
+
+# Análisis técnico
+TA-Lib==0.4.29
+
+# Visualización (opcional)
+matplotlib==3.8.4
+seaborn==0.13.2
+plotly==5.21.0
+
+# Utilidades
+tqdm==4.66.4
+colorama==0.4.6
+python-dateutil==2.8.2
+pytz==2023.4
+
+# Seguridad
+cryptography==41.0.8

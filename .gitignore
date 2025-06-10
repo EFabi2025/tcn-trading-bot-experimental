@@ -1,0 +1,132 @@
+# === ARCHIVOS SENSIBLES Y CREDENCIALES ===
+.env
+.env.local
+.env.production
+*.key
+*.pem
+credentials.json
+
+# === PYTHON ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# === ENTORNOS VIRTUALES ===
+.env/
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# === JUPYTER NOTEBOOKS ===
+.ipynb_checkpoints
+
+# === PYTEST ===
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# === MYPY ===
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# === LOGS Y DATOS ===
+logs/
+*.log
+*.log.*
+log_*.txt
+
+# Base de datos local
+database/
+*.db
+*.sqlite
+*.sqlite3
+
+# Datos de mercado y resultados
+data/raw/
+data/processed/
+results/backtest/
+results/live/
+
+# === TRADING ESPECÍFICO ===
+# Modelos entrenados grandes (>100MB)
+models/*.h5
+models/*.pkl
+!models/tcn_anti_bias_fixed.h5
+!models/feature_scalers_fixed.pkl
+
+# Configuraciones de trading sensibles
+trading_config_prod.yaml
+api_keys.json
+
+# === SISTEMA OPERATIVO ===
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# === EDITORES ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# === TEMPORALES ===
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup
+
+# === DOCUMENTACIÓN GENERADA ===
+docs/_build/
+site/
+
+# === CONFIGURACIONES LOCALES ===
+local_settings.py
+instance/
+.webassets-cache
+
+# === COVERAGE REPORTS ===
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# === PROFILING ===
+.prof
+
+# === SECRETS ===
+secrets/
+.secrets 
