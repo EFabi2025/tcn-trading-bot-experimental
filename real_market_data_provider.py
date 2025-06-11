@@ -16,6 +16,7 @@ Características:
 """
 
 import asyncio
+import time
 import numpy as np
 import pandas as pd
 import talib
@@ -131,7 +132,6 @@ class RealMarketDataProvider:
                 return None
             
             # Guardar en caché
-            import time
             self.cache[cache_key] = (time.time(), sequence_data)
             
             print(f"✅ Features reales obtenidas para {symbol}: {sequence_data.shape}")

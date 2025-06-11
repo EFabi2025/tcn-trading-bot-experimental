@@ -410,6 +410,14 @@ class AdvancedRiskManager:
         # Calcular tamaño de posición
         quantity = self.calculate_position_size(symbol, confidence, price)
         
+        # ⚠️ VALIDACIÓN CRÍTICA: Si quantity = 0, cancelar operación
+        if quantity <= 0.0:
+            print(f"❌ Operación cancelada: Balance insuficiente para {symbol}")
+            print(f"   📊 Cantidad calculada: {quantity}")
+            print(f"   💰 Balance disponible: ${self.current_balance:.2f}")
+            print(f"   💎 Mínimo requerido: ${self.limits.min_position_value_usdt:.2f}")
+            return None
+        
         # 🚀 EJECUTAR ORDEN REAL EN BINANCE
         try:
             order_result = await self._execute_real_binance_order(symbol, signal, quantity, price)
