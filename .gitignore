@@ -1,12 +1,43 @@
-# === ARCHIVOS SENSIBLES Y CREDENCIALES ===
+# 🚀 Professional Trading Bot - .gitignore
+# ==========================================
+
+# 🔐 SEGURIDAD - Archivos de configuración sensibles
+# ==================================================
 .env
 .env.local
 .env.production
+.env.staging
 *.key
 *.pem
+*.p12
+*.pfx
+config.json
+secrets.json
 credentials.json
+api_keys.txt
 
-# === PYTHON ===
+# 🗄️ BASE DE DATOS
+# ================
+*.db
+*.sqlite
+*.sqlite3
+trading_bot.db
+positions.db
+backups/*.db
+
+# 📊 LOGS Y REPORTES
+# ==================
+logs/
+*.log
+*.log.*
+log_*.txt
+reports/
+output/
+temp/
+tmp/
+
+# 🤖 MACHINE LEARNING - Archivos temporales y cache
+# ==================================================
 __pycache__/
 *.py[cod]
 *$py.class
@@ -30,103 +61,199 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# === ENTORNOS VIRTUALES ===
-.env/
+# 🧠 MODELOS ML - Solo versiones de desarrollo
+# ============================================
+# Mantener modelos de producción pero excluir experimentales
+model_*.h5
+*.pkl
+*.joblib
+*.model
+checkpoints/
+experiments/
+training_data/
+test_models/
+backup_models/
+temp_models/
+
+# ⚠️ PERMITIR modelos de producción específicos
+!models/tcn_final_*.h5
+
+# 💾 ENTORNOS VIRTUALES
+# =====================
 .venv/
-env/
 venv/
 ENV/
-env.bak/
-venv.bak/
+env/
+.conda/
+.pyenv/
 
-# === JUPYTER NOTEBOOKS ===
-.ipynb_checkpoints
-
-# === PYTEST ===
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.nox/
-
-# === MYPY ===
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# === LOGS Y DATOS ===
-logs/
-*.log
-*.log.*
-log_*.txt
-
-# Base de datos local
-database/
-*.db
-*.sqlite
-*.sqlite3
-
-# Datos de mercado y resultados
-data/raw/
-data/processed/
-results/backtest/
-results/live/
-
-# === TRADING ESPECÍFICO ===
-# Modelos entrenados grandes (>100MB)
-models/*.h5
-models/*.pkl
-!models/tcn_anti_bias_fixed.h5
-!models/feature_scalers_fixed.pkl
-
-# Configuraciones de trading sensibles
-trading_config_prod.yaml
-api_keys.json
-
-# === SISTEMA OPERATIVO ===
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# === EDITORES ===
+# 🛠️ IDEs Y EDITORES
+# ==================
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+.DS_Store
+Thumbs.db
 
-# === TEMPORALES ===
-tmp/
-temp/
-*.tmp
-*.bak
-*.backup
+# 📦 NODE.JS (si se usa para herramientas frontend)
+# ================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# === DOCUMENTACIÓN GENERADA ===
-docs/_build/
-site/
-
-# === CONFIGURACIONES LOCALES ===
-local_settings.py
-instance/
-.webassets-cache
-
-# === COVERAGE REPORTS ===
-htmlcov/
+# 🧪 TESTING Y COVERAGE
+# =====================
 .coverage
-.coverage.*
+.pytest_cache/
+.tox/
+.nox/
 coverage.xml
 *.cover
 *.py,cover
 .hypothesis/
 
-# === PROFILING ===
-.prof
+# 📈 DATOS DE TRADING - Archivos grandes y sensibles
+# ==================================================
+historical_data/
+market_data/
+price_data/
+*.csv
+*.json
+data/raw/
+data/processed/
+downloads/
+exports/
 
-# === SECRETS ===
-secrets/
-.secrets 
+# ⚠️ PERMITIR archivos de configuración de ejemplo
+!config_example.env
+!*_example.*
+!sample_data/
+
+# 🔄 BACKUPS Y ARCHIVOS TEMPORALES
+# ================================
+backups/
+.backup/
+*.bak
+*.tmp
+*.temp
+*~
+.#*
+\#*#
+
+# 🌐 JUPYTER NOTEBOOKS - Checkpoints
+# ==================================
+.ipynb_checkpoints/
+*.ipynb
+
+# 📊 MATPLOTLIB/PLOTTING
+# ======================
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+plots/
+charts/
+figures/
+
+# ⚠️ PERMITIR logos y documentación
+!docs/images/
+!*.md
+!README.md
+
+# 🚀 DEPLOYMENT Y CI/CD
+# =====================
+.github/workflows/secrets.yml
+deployment_keys/
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# 🎯 SISTEMA ESPECÍFICO
+# =====================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# 📱 MOBILE DEVELOPMENT (si aplica)
+# =================================
+*.apk
+*.ipa
+
+# 🔧 HERRAMIENTAS DE DESARROLLO
+# =============================
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# 📊 PANDAS/NUMPY CACHE
+# =====================
+.pandas_cache/
+*.npy
+*.npz
+
+# 🎮 GAME ENGINES (no aplica pero por completitud)
+# ================================================
+*.unity3d
+*.unitypackage
+
+# 📝 DOCUMENTACIÓN AUTOGENERADA
+# =============================
+docs/_build/
+docs/build/
+site/
+
+# 🔍 PROFILING Y DEBUGGING
+# ========================
+.prof
+profile_*
+*.trace
+
+# 🎯 ARCHIVOS ESPECÍFICOS DEL PROYECTO
+# ====================================
+# Trading específicos
+positions_backup.json
+orders_history.json
+performance_reports/
+trade_analysis/
+
+# Debug y desarrollo
+debug_*.py
+test_*.json
+mock_data.json
+sandbox/
+
+# Configuraciones locales
+local_config.py
+dev_settings.py
+
+# ⚠️ IMPORTANTE: REVISAR ANTES DE COMMIT
+# ======================================
+# Siempre revisar que no se incluyan:
+# - API keys o credenciales
+# - Datos personales de trading
+# - Balances o información financiera real
+# - Logs con información sensible
+
+# 📖 ARCHIVOS A INCLUIR SIEMPRE
+# =============================
+# README.md
+# requirements.txt
+# config_example.env
+# install.sh
+# LICENSE
+# models/tcn_final_*.h5 (modelos de producción) 
