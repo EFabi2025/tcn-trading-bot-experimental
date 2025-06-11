@@ -290,7 +290,7 @@ class SimpleProfessionalTradingManager:
             # 6. Configurar monitoreo
             await self._setup_monitoring()
             
-            self.start_time = datetime.now()
+            self.start_time = time.time()
             self.last_heartbeat = datetime.now()
             self.status = TradingManagerStatus.RUNNING
             
@@ -577,16 +577,28 @@ class SimpleProfessionalTradingManager:
     async def _send_tcn_discord_notification(self, tcn_report: str):
         """💬 Enviar reporte TCN a Discord"""
         try:
+            if not tcn_report or len(tcn_report.strip()) == 0:
+                print("⚠️ Reporte TCN vacío, saltando Discord")
+                return
+                
             from smart_discord_notifier import NotificationPriority
             
             # Enviar reporte completo con prioridad alta
-            await self.discord_notifier.send_system_notification(
+            result = await self.discord_notifier.send_system_notification(
                 tcn_report, 
                 NotificationPriority.HIGH
             )
             
+            if result and hasattr(result, 'status_code'):
+                if result.status_code == 204:
+                    print("✅ Discord: Reporte TCN enviado (204 OK)")
+                elif result.status_code == 200:
+                    print("✅ Discord: Reporte TCN enviado (200 OK)")
+                else:
+                    print(f"⚠️ Discord: Status {result.status_code}")
+            
         except Exception as e:
-            print(f"⚠️ Error enviando reporte TCN a Discord: {e}")
+            print(f"❌ Discord error: {e}")
     
     async def _update_positions_pnl(self, prices: Dict[str, float]):
         """📈 Actualizar PnL de todas las posiciones activas"""
@@ -901,7 +913,7 @@ class SimpleProfessionalTradingManager:
                             trailing_updates.append(f"📈 {updated_position.symbol} Pos #{updated_position.order_id}: Trail movido a ${updated_position.trailing_stop_price:.4f}")
                     
                     # Verificar condiciones de cierre
-                    should_close, close_reason = await self._check_position_exit_conditions(updated_position)
+                    should_close, close_reason = await self._check_position_exit_conditions(updated_position, current_price)
                     
                     if stop_triggered or should_close:
                         reason = trigger_reason if stop_triggered else close_reason
@@ -1211,7 +1223,7 @@ class SimpleProfessionalTradingManager:
         # Calcular uptime
         uptime_seconds = 0
         if self.start_time:
-            uptime_seconds = (datetime.now() - self.start_time).total_seconds()
+            uptime_seconds = time.time() - self.start_time
         
         # Calcular exposición total
         total_exposure = 0
