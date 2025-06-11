@@ -1,13 +1,13 @@
 """
-🧪 EDUCATIONAL Binance Client - Trading Bot Experimental
+🧪 EXPERIMENTAL Binance Client - Trading Bot Research
 
-Este módulo implementa un cliente educacional para Binance que:
-- Opera SOLO en testnet para aprendizaje
-- Implementa dry-run mode por defecto
+Este módulo implementa un cliente experimental para Binance que:
+- Puede operar en testnet O producción según configuración
+- Implementa dry-run mode configurable
 - Demuestra patrones de integración con APIs externas
-- Incluye manejo robusto de errores para educación
+- Incluye manejo robusto de errores para investigación
 
-⚠️ EXPERIMENTAL: Solo para fines educacionales
+⚠️ EXPERIMENTAL: Para investigación en trading algorítmico
 """
 
 import asyncio
@@ -29,68 +29,64 @@ from ..core.logging_config import TradingLogger
 logger = structlog.get_logger(__name__)
 
 
-class EducationalBinanceClient(ITradingClient, IMarketDataProvider):
+class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
     """
-    🎓 Cliente educacional de Binance para aprendizaje
+    🧪 Cliente experimental de Binance para investigación
     
-    Características educacionales:
-    - Dry-run mode por defecto (NO ejecuta trades reales)
-    - Solo testnet para experimentos seguros
-    - Logging educacional detallado
-    - Manejo de errores didáctico
+    Características experimentales:
+    - Dry-run mode configurable (para investigación segura)
+    - Soporte para testnet Y producción
+    - Logging detallado para análisis
+    - Manejo de errores para investigación
     """
     
     def __init__(self, settings: TradingBotSettings, trading_logger: TradingLogger):
         """
-        Inicializa el cliente educacional de Binance
+        Inicializa el cliente experimental de Binance
         
         Args:
-            settings: Configuración del bot (debe tener dry_run=True)
-            trading_logger: Logger estructurado para educación
+            settings: Configuración del bot
+            trading_logger: Logger estructurado para investigación
         """
         self.settings = settings
         self.logger = trading_logger
         self._client: Optional[BinanceRestClient] = None
-        self._is_testnet = True  # 🚨 SIEMPRE testnet para educación
-        
-        # 🛡️ Validación de seguridad educacional
-        if not settings.dry_run:
-            raise ValueError("🚨 EDUCATIONAL: Este cliente requiere dry_run=True")
-        
-        if not settings.binance_testnet:
-            raise ValueError("🚨 EDUCATIONAL: Este cliente requiere testnet=True")
+        self._is_testnet = settings.binance_testnet
         
         self._initialize_client()
     
     def _initialize_client(self) -> None:
-        """Inicializa el cliente de Binance (solo testnet)"""
+        """Inicializa el cliente de Binance (testnet o producción)"""
         try:
-            # 🎓 EDUCATIONAL: Configuración solo para testnet
+            # 🧪 EXPERIMENTAL: Configuración según settings
             self._client = BinanceRestClient(
                 api_key=self.settings.binance_api_key.get_secret_value(),
                 api_secret=self.settings.binance_secret.get_secret_value(),
-                testnet=True  # 🚨 FORZADO para educación
+                testnet=self._is_testnet
             )
             
-            # Verificar conectividad educacional
+            # Verificar conectividad
             self._verify_connection()
             
             self.logger.log_system_event(
                 "binance_client_initialized",
-                testnet=True,
-                dry_run=self.settings.dry_run
+                testnet=self._is_testnet,
+                dry_run=self.settings.dry_run,
+                environment=self.settings.environment,
+                experimental_note="Cliente Binance inicializado para investigación"
             )
             
         except Exception as e:
             self.logger.log_error(
                 "binance_client_init_failed",
                 error=str(e),
-                educational_note="Verificar credenciales de testnet"
+                testnet=self._is_testnet,
+                research_note="Verificar credenciales de API"
             )
             raise
     
     def _verify_connection(self) -> None:
-        """Verifica conexión educacional con Binance testnet"""
+        """Verifica conexión experimental con Binance"""
         try:
             # Test básico de conectividad
             server_time = self._client.get_server_time()
@@ -100,7 +96,8 @@ class EducationalBinanceClient(ITradingClient, IMarketDataProvider):
                 "binance_connection_verified",
                 server_time=server_time,
                 account_status=account_status.get('data', 'unknown'),
-                educational_note="Conexión testnet establecida"
+                testnet=self._is_testnet,
+                research_note="Conexión establecida para investigación"
             )
             
         except BinanceAPIException as e:
@@ -108,62 +105,135 @@ class EducationalBinanceClient(ITradingClient, IMarketDataProvider):
                 "binance_connection_failed",
                 error_code=e.code,
                 error_message=e.message,
-                educational_tip="Verificar API keys de testnet en .env"
+                testnet=self._is_testnet,
+                research_tip="Verificar API keys y permisos"
             )
             raise
     
     async def create_order(self, order_request: OrderRequestSchema) -> OrderSchema:
         """
-        🎓 EDUCATIONAL: Crea una orden (DRY-RUN mode)
+        🧪 EXPERIMENTAL: Crea una orden (real o simulada según configuración)
         
-        En modo educacional, simula la orden sin ejecutarla realmente
+        En modo dry_run=True: simula la orden
+        En modo dry_run=False: ejecuta orden real en Binance
         """
         self.logger.log_order_request(
             order_request.dict(),
-            dry_run=True,
-            educational_note="Modo educacional - NO se ejecuta trade real"
+            dry_run=self.settings.dry_run,
+            testnet=self._is_testnet,
+            research_note="Procesando orden experimental"
         )
         
-        # 🛡️ Validación educacional
-        if not self.settings.dry_run:
-            raise ValueError("🚨 EDUCATIONAL: Solo dry-run permitido")
-        
         try:
-            # 🎓 SIMULAR orden para educación
-            simulated_order = await self._simulate_order(order_request)
-            
-            self.logger.log_order_completed(
-                simulated_order.dict(),
-                dry_run=True,
-                educational_note="Orden simulada exitosamente"
-            )
-            
-            return simulated_order
+            if self.settings.dry_run:
+                # 🧪 SIMULAR orden para investigación segura
+                simulated_order = await self._simulate_order(order_request)
+                
+                self.logger.log_order_completed(
+                    simulated_order.dict(),
+                    dry_run=True,
+                    research_note="Orden simulada para investigación"
+                )
+                
+                return simulated_order
+            else:
+                # 🚨 EJECUTAR orden REAL en Binance
+                real_order = await self._execute_real_order(order_request)
+                
+                self.logger.log_order_completed(
+                    real_order.dict(),
+                    dry_run=False,
+                    testnet=self._is_testnet,
+                    research_note="Orden REAL ejecutada en Binance"
+                )
+                
+                return real_order
             
         except Exception as e:
             self.logger.log_error(
-                "educational_order_simulation_failed",
+                "experimental_order_failed",
                 error=str(e),
                 order_symbol=order_request.symbol,
-                educational_tip="Error en simulación educacional"
+                dry_run=self.settings.dry_run,
+                research_tip="Error en ejecución de orden experimental"
+            )
+            raise
+    
+    async def _execute_real_order(self, order_request: OrderRequestSchema) -> OrderSchema:
+        """
+        🚨 Ejecuta orden REAL en Binance
+        
+        CUIDADO: Esta función ejecuta trades reales con dinero real
+        """
+        try:
+            # Preparar parámetros para Binance API
+            order_params = {
+                'symbol': order_request.symbol,
+                'side': order_request.side.upper(),
+                'type': order_request.type.upper(),
+                'quantity': float(order_request.quantity),
+            }
+            
+            # Añadir precio si es orden LIMIT
+            if order_request.type.upper() == 'LIMIT':
+                order_params['price'] = float(order_request.price)
+                order_params['timeInForce'] = 'GTC'  # Good Till Cancelled
+            
+            # 🚨 EJECUTAR ORDEN REAL
+            result = self._client.create_order(**order_params)
+            
+            # Convertir respuesta de Binance a nuestro schema
+            order = OrderSchema(
+                id=result['orderId'],
+                symbol=result['symbol'],
+                side=result['side'],
+                type=result['type'],
+                quantity=Decimal(result['origQty']),
+                price=Decimal(result.get('price', order_request.price)),
+                status=result['status'],
+                timestamp=datetime.fromtimestamp(result['transactTime'] / 1000, timezone.utc),
+                filled_quantity=Decimal(result.get('executedQty', '0')),
+                remaining_quantity=Decimal(result['origQty']) - Decimal(result.get('executedQty', '0')),
+                average_price=Decimal(result.get('cummulativeQuoteQty', '0')) / Decimal(result.get('executedQty', '1')) if float(result.get('executedQty', '0')) > 0 else Decimal('0'),
+                commission=Decimal('0'),  # Se obtiene de otro endpoint
+                commission_asset="USDT"
+            )
+            
+            return order
+            
+        except BinanceAPIException as e:
+            self.logger.log_error(
+                "real_order_execution_failed",
+                error_code=e.code,
+                error_message=e.message,
+                order_symbol=order_request.symbol,
+                research_note="Error en orden real de Binance"
+            )
+            raise
+        except Exception as e:
+            self.logger.log_error(
+                "real_order_unexpected_error",
+                error=str(e),
+                order_symbol=order_request.symbol,
+                research_note="Error inesperado en orden real"
             )
             raise
     
     async def _simulate_order(self, order_request: OrderRequestSchema) -> OrderSchema:
         """
-        🎓 Simula una orden para propósitos educacionales
+        🧪 Simula una orden para investigación segura
         
-        Genera datos realistas sin ejecutar trade real
+        Genera datos realistas basados en precio actual de mercado
         """
         # Obtener precio actual para simulación realista
         current_price = await self._get_current_price(order_request.symbol)
         
-        # Simular fill price con pequeño slippage educacional
+        # Simular fill price con pequeño slippage
         slippage_factor = Decimal('1.001') if order_request.side == 'BUY' else Decimal('0.999')
         fill_price = current_price * slippage_factor
         
-        # ID simulado para educación
-        simulated_order_id = f"EDU_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        # ID simulado para investigación
+        simulated_order_id = f"SIM_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
         return OrderSchema(
             id=simulated_order_id,
@@ -172,7 +242,7 @@ class EducationalBinanceClient(ITradingClient, IMarketDataProvider):
             type=order_request.type,
             quantity=order_request.quantity,
             price=fill_price,
-            status="FILLED_SIMULATED",  # 🎓 Status educacional
+            status="FILLED_SIMULATED",  # 🧪 Status experimental
             timestamp=datetime.now(timezone.utc),
             filled_quantity=order_request.quantity,
             remaining_quantity=Decimal('0'),
@@ -182,41 +252,86 @@ class EducationalBinanceClient(ITradingClient, IMarketDataProvider):
         )
     
     async def cancel_order(self, symbol: str, order_id: str) -> bool:
-        """🎓 EDUCATIONAL: Cancela orden (simulado en dry-run)"""
+        """🧪 Cancela orden (real o simulada según configuración)"""
         self.logger.log_system_event(
-            "educational_order_cancellation",
+            "experimental_order_cancellation",
             symbol=symbol,
             order_id=order_id,
-            dry_run=True,
-            educational_note="Cancelación simulada"
+            dry_run=self.settings.dry_run,
+            research_note="Cancelando orden experimental"
         )
         
-        # En modo educacional, simular cancelación exitosa
-        return True
+        if self.settings.dry_run:
+            # En modo simulado, siempre exitoso
+            return True
+        else:
+            try:
+                # 🚨 CANCELAR orden REAL en Binance
+                result = self._client.cancel_order(symbol=symbol, orderId=order_id)
+                return result['status'] == 'CANCELED'
+            except BinanceAPIException as e:
+                self.logger.log_error(
+                    "real_order_cancellation_failed",
+                    error_code=e.code,
+                    error_message=e.message,
+                    symbol=symbol,
+                    order_id=order_id
+                )
+                return False
     
     async def get_order_status(self, symbol: str, order_id: str) -> OrderSchema:
-        """🎓 EDUCATIONAL: Obtiene status de orden simulada"""
-        # Para educación, simular orden completada
-        current_price = await self._get_current_price(symbol)
-        
-        return OrderSchema(
-            id=order_id,
-            symbol=symbol,
-            side="BUY",  # Ejemplo educacional
-            type="MARKET",
-            quantity=Decimal('0.001'),
-            price=current_price,
-            status="FILLED_SIMULATED",
-            timestamp=datetime.now(timezone.utc),
-            filled_quantity=Decimal('0.001'),
-            remaining_quantity=Decimal('0'),
-            average_price=current_price,
-            commission=current_price * Decimal('0.001') * Decimal('0.001'),
-            commission_asset="USDT"
-        )
+        """🧪 Obtiene status de orden (real o simulada)"""
+        if self.settings.dry_run:
+            # Para simulación, retornar orden completada
+            current_price = await self._get_current_price(symbol)
+            
+            return OrderSchema(
+                id=order_id,
+                symbol=symbol,
+                side="BUY",  # Ejemplo
+                type="MARKET",
+                quantity=Decimal('0.001'),
+                price=current_price,
+                status="FILLED_SIMULATED",
+                timestamp=datetime.now(timezone.utc),
+                filled_quantity=Decimal('0.001'),
+                remaining_quantity=Decimal('0'),
+                average_price=current_price,
+                commission=current_price * Decimal('0.001') * Decimal('0.001'),
+                commission_asset="USDT"
+            )
+        else:
+            try:
+                # 🚨 CONSULTAR orden REAL en Binance
+                result = self._client.get_order(symbol=symbol, orderId=order_id)
+                
+                return OrderSchema(
+                    id=result['orderId'],
+                    symbol=result['symbol'],
+                    side=result['side'],
+                    type=result['type'],
+                    quantity=Decimal(result['origQty']),
+                    price=Decimal(result.get('price', '0')),
+                    status=result['status'],
+                    timestamp=datetime.fromtimestamp(result['time'] / 1000, timezone.utc),
+                    filled_quantity=Decimal(result.get('executedQty', '0')),
+                    remaining_quantity=Decimal(result['origQty']) - Decimal(result.get('executedQty', '0')),
+                    average_price=Decimal(result.get('cummulativeQuoteQty', '0')) / Decimal(result.get('executedQty', '1')) if float(result.get('executedQty', '0')) > 0 else Decimal('0'),
+                    commission=Decimal('0'),
+                    commission_asset="USDT"
+                )
+            except BinanceAPIException as e:
+                self.logger.log_error(
+                    "real_order_status_failed",
+                    error_code=e.code,
+                    error_message=e.message,
+                    symbol=symbol,
+                    order_id=order_id
+                )
+                raise
     
     async def get_balances(self) -> List[BalanceSchema]:
-        """🎓 EDUCATIONAL: Obtiene balances de testnet"""
+        """🧪 Obtiene balances reales de Binance"""
         try:
             account_info = self._client.get_account()
             balances = []
@@ -225,7 +340,7 @@ class EducationalBinanceClient(ITradingClient, IMarketDataProvider):
                 free_balance = Decimal(balance['free'])
                 locked_balance = Decimal(balance['locked'])
                 
-                # Solo incluir balances con valor para educación
+                # Solo incluir balances con valor
                 if free_balance > 0 or locked_balance > 0:
                     balances.append(BalanceSchema(
                         asset=balance['asset'],
@@ -236,31 +351,30 @@ class EducationalBinanceClient(ITradingClient, IMarketDataProvider):
             
             self.logger.log_balance_check(
                 [b.dict() for b in balances],
-                educational_note="Balances de testnet para educación"
+                testnet=self._is_testnet,
+                research_note="Balances obtenidos para investigación"
             )
             
             return balances
             
         except BinanceAPIException as e:
             self.logger.log_error(
-                "educational_balance_fetch_failed",
+                "experimental_balance_fetch_failed",
                 error_code=e.code,
                 error_message=e.message,
-                educational_tip="Verificar permisos de API en testnet"
+                testnet=self._is_testnet,
+                research_tip="Verificar permisos de API"
             )
             raise
     
     async def get_market_data(self, symbol: str) -> MarketDataSchema:
-        """🎓 EDUCATIONAL: Obtiene datos de mercado en tiempo real"""
+        """🧪 Obtiene datos de mercado en tiempo real"""
         try:
             # Obtener ticker 24h
             ticker = self._client.get_ticker(symbol=symbol)
             
             # Obtener orderbook
             orderbook = self._client.get_order_book(symbol=symbol, limit=5)
-            
-            # Obtener trades recientes
-            recent_trades = self._client.get_recent_trades(symbol=symbol, limit=10)
             
             market_data = MarketDataSchema(
                 symbol=symbol,
@@ -279,18 +393,20 @@ class EducationalBinanceClient(ITradingClient, IMarketDataProvider):
             
             self.logger.log_market_data(
                 market_data.dict(),
-                educational_note="Datos reales de testnet para educación"
+                testnet=self._is_testnet,
+                research_note="Datos de mercado para investigación"
             )
             
             return market_data
             
         except BinanceAPIException as e:
             self.logger.log_error(
-                "educational_market_data_failed",
+                "experimental_market_data_failed",
                 symbol=symbol,
                 error_code=e.code,
                 error_message=e.message,
-                educational_tip="Verificar símbolo válido en testnet"
+                testnet=self._is_testnet,
+                research_tip="Verificar símbolo válido"
             )
             raise
     
@@ -300,11 +416,11 @@ class EducationalBinanceClient(ITradingClient, IMarketDataProvider):
             ticker = self._client.get_symbol_ticker(symbol=symbol)
             return Decimal(ticker['price'])
         except Exception:
-            # Fallback educacional
-            return Decimal('50000.0')  # Precio BTC ejemplo para educación
+            # Fallback para investigación
+            return Decimal('50000.0')  # Precio BTC ejemplo
     
     async def get_symbol_info(self, symbol: str) -> Dict[str, Any]:
-        """🎓 EDUCATIONAL: Obtiene información del símbolo"""
+        """🧪 Obtiene información del símbolo"""
         try:
             exchange_info = self._client.get_exchange_info()
             
@@ -321,22 +437,22 @@ class EducationalBinanceClient(ITradingClient, IMarketDataProvider):
                         'minPrice': symbol_info['filters'][0]['minPrice'],
                         'maxPrice': symbol_info['filters'][0]['maxPrice'],
                         'tickSize': symbol_info['filters'][0]['tickSize'],
-                        'educational_note': "Info de testnet para aprendizaje"
+                        'research_note': "Info obtenida para investigación"
                     }
             
-            raise ValueError(f"🎓 Símbolo {symbol} no encontrado en testnet")
+            raise ValueError(f"🧪 Símbolo {symbol} no encontrado")
             
         except BinanceAPIException as e:
             self.logger.log_error(
-                "educational_symbol_info_failed",
+                "experimental_symbol_info_failed",
                 symbol=symbol,
                 error_code=e.code,
-                educational_tip="Verificar símbolo disponible en testnet"
+                research_tip="Verificar símbolo disponible"
             )
             raise
     
     def is_connected(self) -> bool:
-        """🎓 Verifica conexión educacional"""
+        """🧪 Verifica conexión"""
         try:
             if self._client:
                 self._client.ping()
@@ -346,10 +462,10 @@ class EducationalBinanceClient(ITradingClient, IMarketDataProvider):
             return False
     
     async def close(self) -> None:
-        """🎓 Cierra conexión educacional"""
+        """🧪 Cierra conexión"""
         self.logger.log_system_event(
-            "educational_binance_client_closed",
-            educational_note="Cliente educacional desconectado"
+            "experimental_binance_client_closed",
+            research_note="Cliente experimental desconectado"
         )
         # No hay conexión persistente que cerrar en REST API
         pass 
