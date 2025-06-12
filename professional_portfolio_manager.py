@@ -566,7 +566,7 @@ class ProfessionalPortfolioManager:
     # ✅ NUEVO: Sistema de Trailing Stop Profesional
     
     def initialize_position_stops(self, position: Position) -> Position:
-        """🛡️ Inicializar stops tradicionales y trailing para nueva posición"""
+        """🛡️ Inicializar Stop Loss, Take Profit y Trailing Stop para una posición"""
         try:
             # Configurar Stop Loss y Take Profit tradicionales
             if position.side == 'BUY':
@@ -591,6 +591,7 @@ class ProfessionalPortfolioManager:
             print(f"   🛑 Stop Loss: ${position.stop_loss_price:.4f} (-{position.stop_loss_percent}%)")
             print(f"   🎯 Take Profit: ${position.take_profit_price:.4f} (+{position.take_profit_percent}%)")
             print(f"   📈 Trailing: INACTIVO (activar en +{position.trailing_activation_threshold}%)")
+            print(f"   💰 Protección mínima: +0.9% (cubre comisiones Binance)")
             
             return position
             
@@ -599,13 +600,13 @@ class ProfessionalPortfolioManager:
             return position
     
     def update_trailing_stop_professional(self, position: Position, current_price: float) -> Tuple[Position, bool, str]:
-        """📈 Sistema profesional de Trailing Stop por posición individual"""
+        """📈 Sistema profesional de Trailing Stop por posición individual - CORREGIDO"""
         try:
             stop_triggered = False
             trigger_reason = ""
             
             if position.side == 'BUY':
-                # ✅ LONG POSITION LOGIC
+                # ✅ LONG POSITION LOGIC - CORREGIDA
                 
                 # 1. Actualizar precio máximo histórico
                 if position.highest_price_since_entry is None or current_price > position.highest_price_since_entry:
@@ -614,21 +615,39 @@ class ProfessionalPortfolioManager:
                 # 2. Calcular ganancia actual
                 current_pnl_percent = ((current_price - position.entry_price) / position.entry_price) * 100
                 
-                # 3. Verificar si debe activarse el trailing stop
+                # 3. ✅ CORRECCIÓN: Verificar si debe activarse el trailing stop
                 if not position.trailing_stop_active and current_pnl_percent >= position.trailing_activation_threshold:
                     position.trailing_stop_active = True
-                    position.trailing_stop_price = current_price * (1 - position.trailing_stop_percent / 100)
+                    
+                    # ✅ CORRECCIÓN CRÍTICA: El trailing inicial debe estar ARRIBA del precio de entrada
+                    # Usar el precio máximo alcanzado, no el precio actual
+                    max_price_reached = position.highest_price_since_entry
+                    proposed_trailing = max_price_reached * (1 - position.trailing_stop_percent / 100)
+                    
+                    # ✅ GARANTIZAR que el trailing cubra comisiones: mínimo +0.9%
+                    # Comisiones Binance: ~0.1% compra + ~0.1% venta + margen seguridad = 0.9%
+                    min_trailing_price = position.entry_price * (1 + 0.009)  # Al menos +0.9% sobre entrada
+                    position.trailing_stop_price = max(proposed_trailing, min_trailing_price)
+                    
                     position.last_trailing_update = datetime.now()
                     
+                    protection_percent = ((position.trailing_stop_price - position.entry_price) / position.entry_price) * 100
+                    
                     print(f"📈 TRAILING ACTIVADO {position.symbol} Pos #{position.order_id}:")
-                    print(f"   🎯 Ganancia: +{current_pnl_percent:.2f}% (umbral: +{position.trailing_activation_threshold}%)")
-                    print(f"   📈 Trailing Stop inicial: ${position.trailing_stop_price:.4f}")
+                    print(f"   🎯 Ganancia actual: +{current_pnl_percent:.2f}%")
+                    print(f"   🏔️ Máximo alcanzado: ${max_price_reached:.4f}")
+                    print(f"   📈 Trailing Stop: ${position.trailing_stop_price:.4f}")
+                    print(f"   🛡️ Protegiendo: +{protection_percent:.2f}% ganancia mínima")
+                    print(f"   💰 Cubre comisiones: +{protection_percent:.2f}% > 0.9% ✅")
                 
                 # 4. Actualizar trailing stop si está activo
                 elif position.trailing_stop_active:
                     new_trailing_price = position.highest_price_since_entry * (1 - position.trailing_stop_percent / 100)
                     
-                    # Solo mover trailing stop hacia arriba (más favorable)
+                    # ✅ CORRECCIÓN: Solo mover si mejora la protección Y está por encima de entrada + comisiones
+                    min_trailing_price = position.entry_price * (1 + 0.009)  # Mínimo +0.9%
+                    new_trailing_price = max(new_trailing_price, min_trailing_price)
+                    
                     if new_trailing_price > position.trailing_stop_price:
                         old_price = position.trailing_stop_price
                         position.trailing_stop_price = new_trailing_price
@@ -641,21 +660,29 @@ class ProfessionalPortfolioManager:
                         print(f"   🔄 ${old_price:.4f} → ${new_trailing_price:.4f}")
                         print(f"   🏔️ Máximo: ${position.highest_price_since_entry:.4f}")
                         print(f"   🛡️ Protegiendo: +{profit_protection:.2f}% ganancia")
+                        print(f"   💰 Cubre comisiones: +{profit_protection:.2f}% > 0.9% ✅")
                         print(f"   📊 Movimiento #{position.trailing_movements}")
                 
-                # 5. Verificar si se debe cerrar por trailing stop
+                # 5. ✅ CORRECCIÓN: Verificar si se debe cerrar por trailing stop
                 if position.trailing_stop_active and current_price <= position.trailing_stop_price:
-                    stop_triggered = True
-                    trigger_reason = "TRAILING_STOP"
-                    
+                    # ✅ VERIFICACIÓN ADICIONAL: Solo ejecutar si realmente hay ganancia que cubra comisiones
                     final_pnl = ((position.trailing_stop_price - position.entry_price) / position.entry_price) * 100
-                    max_profit = ((position.highest_price_since_entry - position.entry_price) / position.entry_price) * 100
                     
-                    print(f"🛑 TRAILING STOP EJECUTADO {position.symbol} Pos #{position.order_id}:")
-                    print(f"   📉 Precio: ${current_price:.4f} <= Trailing: ${position.trailing_stop_price:.4f}")
-                    print(f"   💰 PnL Final: +{final_pnl:.2f}%")
-                    print(f"   🏔️ Máximo alcanzado: +{max_profit:.2f}%")
-                    print(f"   📈 Movimientos trailing: {position.trailing_movements}")
+                    if final_pnl >= 0.9:  # Solo ejecutar si hay ganancia >= 0.9% (cubre comisiones)
+                        stop_triggered = True
+                        trigger_reason = "TRAILING_STOP"
+                        
+                        max_profit = ((position.highest_price_since_entry - position.entry_price) / position.entry_price) * 100
+                        net_profit_after_commissions = final_pnl - 0.2  # Estimado comisiones reales
+                        
+                        print(f"🛑 TRAILING STOP EJECUTADO {position.symbol} Pos #{position.order_id}:")
+                        print(f"   📉 Precio: ${current_price:.4f} <= Trailing: ${position.trailing_stop_price:.4f}")
+                        print(f"   💰 PnL Final: +{final_pnl:.2f}% ✅")
+                        print(f"   💸 Ganancia neta (post-comisiones): +{net_profit_after_commissions:.2f}%")
+                        print(f"   🏔️ Máximo alcanzado: +{max_profit:.2f}%")
+                        print(f"   📈 Movimientos trailing: {position.trailing_movements}")
+                    else:
+                        print(f"⚠️ TRAILING STOP NO EJECUTADO - PnL insuficiente: {final_pnl:.2f}% < 0.9%")
                 
                 # 6. Verificar stop loss tradicional (solo si trailing no está activo o es menor)
                 elif current_price <= position.stop_loss_price:
@@ -667,7 +694,7 @@ class ProfessionalPortfolioManager:
                         print(f"🛑 STOP LOSS TRADICIONAL {position.symbol} Pos #{position.order_id}: {loss_pnl:.2f}%")
             
             else:
-                # ✅ SHORT POSITION LOGIC (para futuros)
+                # ✅ SHORT POSITION LOGIC (para futuros) - Similar corrección
                 
                 # Actualizar precio mínimo histórico
                 if position.lowest_price_since_entry is None or current_price < position.lowest_price_since_entry:
@@ -679,12 +706,22 @@ class ProfessionalPortfolioManager:
                 # Activar trailing si está en ganancia
                 if not position.trailing_stop_active and current_pnl_percent >= position.trailing_activation_threshold:
                     position.trailing_stop_active = True
-                    position.trailing_stop_price = current_price * (1 + position.trailing_stop_percent / 100)
+                    
+                    # Para shorts: trailing debe estar DEBAJO del precio de entrada
+                    min_price_reached = position.lowest_price_since_entry
+                    proposed_trailing = min_price_reached * (1 + position.trailing_stop_percent / 100)
+                    
+                    # Garantizar que esté por debajo del precio de entrada pero cubra comisiones
+                    max_trailing_price = position.entry_price * (1 - 0.009)  # Al menos -0.9%
+                    position.trailing_stop_price = min(proposed_trailing, max_trailing_price)
+                    
                     position.last_trailing_update = datetime.now()
                 
                 # Actualizar trailing (solo hacia abajo para shorts)
                 elif position.trailing_stop_active:
                     new_trailing_price = position.lowest_price_since_entry * (1 + position.trailing_stop_percent / 100)
+                    max_trailing_price = position.entry_price * (1 - 0.009)
+                    new_trailing_price = min(new_trailing_price, max_trailing_price)
                     
                     if new_trailing_price < position.trailing_stop_price:
                         position.trailing_stop_price = new_trailing_price
@@ -693,8 +730,10 @@ class ProfessionalPortfolioManager:
                 
                 # Verificar cierre por trailing
                 if position.trailing_stop_active and current_price >= position.trailing_stop_price:
-                    stop_triggered = True
-                    trigger_reason = "TRAILING_STOP"
+                    final_pnl = ((position.entry_price - position.trailing_stop_price) / position.entry_price) * 100
+                    if final_pnl >= 0.9:  # Solo ejecutar si hay ganancia >= 0.9% (cubre comisiones)
+                        stop_triggered = True
+                        trigger_reason = "TRAILING_STOP"
             
             return position, stop_triggered, trigger_reason
             

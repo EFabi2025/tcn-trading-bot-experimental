@@ -980,44 +980,165 @@ class SimpleProfessionalTradingManager:
             return False, ""
     
     async def _close_positions_batch(self, positions_and_reasons: List[Tuple]) -> None:
-        """🚀 Cerrar múltiples posiciones en lote"""
+        """🚀 Cerrar múltiples posiciones en lote - CON ÓRDENES REALES"""
         try:
             print(f"🔥 Iniciando cierre de {len(positions_and_reasons)} posición(es)...")
             
             for position, reason in positions_and_reasons:
                 try:
-                    # Simular cierre de posición (en producción, aquí iría la orden real de venta)
                     print(f"🛑 CERRANDO POSICIÓN {position.symbol} Pos #{position.order_id}:")
                     print(f"   📍 Entrada: ${position.entry_price:.4f}")
                     print(f"   💰 Actual: ${position.current_price:.4f}")
                     print(f"   📊 PnL: {position.unrealized_pnl_percent:.2f}% (${position.unrealized_pnl_usd:.2f})")
                     print(f"   🏷️ Razón: {reason}")
                     
-                    # En producción real, aquí ejecutarías:
-                    # order_result = await self._execute_sell_order(position)
+                    # ✅ EJECUTAR ORDEN REAL DE CIERRE EN BINANCE
+                    order_result = await self._execute_sell_order(position)
+                    
+                    if order_result:
+                        # Usar precio real de ejecución
+                        real_close_price = float(order_result.get('fills', [{}])[0].get('price', position.current_price))
+                        real_quantity = float(order_result.get('executedQty', position.size))
+                        
+                        # Calcular PnL real con precio de ejecución
+                        if position.side == 'BUY':
+                            real_pnl_percent = ((real_close_price - position.entry_price) / position.entry_price) * 100
+                        else:
+                            real_pnl_percent = ((position.entry_price - real_close_price) / position.entry_price) * 100
+                        
+                        real_pnl_usd = (real_pnl_percent / 100) * (real_quantity * position.entry_price)
+                        
+                        print(f"✅ ORDEN REAL EJECUTADA:")
+                        print(f"   🆔 Order ID: {order_result.get('orderId')}")
+                        print(f"   💲 Precio real: ${real_close_price:.4f}")
+                        print(f"   📊 PnL real: {real_pnl_percent:.2f}% (${real_pnl_usd:.2f})")
+                        
+                        # Actualizar métricas con datos reales
+                        self.session_pnl += real_pnl_usd
+                        
+                    else:
+                        print(f"❌ Error ejecutando orden real - usando datos estimados")
+                        # Fallback a datos estimados si falla la orden
+                        real_pnl_percent = position.unrealized_pnl_percent
+                        real_pnl_usd = position.unrealized_pnl_usd
+                        self.session_pnl += real_pnl_usd
                     
                     # Logging de la operación
                     await self.database.log_event(
                         'TRADE', 
                         'POSITION_CLOSED', 
-                        f"{position.symbol}: {reason} - PnL: {position.unrealized_pnl_percent:.2f}%"
+                        f"{position.symbol}: {reason} - PnL: {real_pnl_percent:.2f}% - Order: {order_result.get('orderId', 'FAILED') if order_result else 'FAILED'}"
                     )
                     
                     # Actualizar métricas
                     self.metrics['total_trades'] += 1
-                    if position.unrealized_pnl_usd > 0:
+                    if real_pnl_usd > 0:
                         self.metrics['profitable_trades'] += 1
                     
                     print(f"✅ Posición {position.symbol} cerrada exitosamente")
                     
                 except Exception as e:
                     print(f"❌ Error cerrando {position.symbol}: {e}")
+                    await self.database.log_event('ERROR', 'TRADING', f'Error cerrando posición {position.symbol}: {e}')
                     continue
             
             print(f"🎯 Proceso de cierre completado")
             
         except Exception as e:
             print(f"❌ Error en cierre de posiciones en lote: {e}")
+    
+    async def _execute_sell_order(self, position) -> Optional[Dict]:
+        """🔥 EJECUTAR ORDEN REAL DE VENTA EN BINANCE"""
+        try:
+            # Determinar lado de la orden de cierre
+            close_side = 'SELL' if position.side == 'BUY' else 'BUY'
+            
+            # Obtener precio actual para la orden
+            current_price = await self.get_current_price(position.symbol)
+            
+            # Preparar parámetros de orden
+            timestamp = int(time.time() * 1000)
+            
+            # Ajustar cantidad según filtros del símbolo
+            adjusted_quantity = await self._adjust_quantity_for_symbol(position.symbol, position.size)
+            
+            params = {
+                'symbol': position.symbol,
+                'side': close_side,
+                'type': 'MARKET',  # Orden de mercado para cierre inmediato
+                'quantity': f"{adjusted_quantity:.8f}".rstrip('0').rstrip('.'),
+                'timestamp': timestamp
+            }
+            
+            # Crear signature
+            query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+            signature = hmac.new(
+                self.config.secret_key.encode('utf-8'),
+                query_string.encode('utf-8'),
+                hashlib.sha256
+            ).hexdigest()
+            
+            params['signature'] = signature
+            
+            # Headers de autenticación
+            headers = {
+                'X-MBX-APIKEY': self.config.api_key,
+                'Content-Type': 'application/x-www-form-urlencoded'
+            }
+            
+            print(f"📡 Ejecutando orden de cierre: {close_side} {params['quantity']} {position.symbol}")
+            
+            # Ejecutar orden POST /api/v3/order
+            async with aiohttp.ClientSession() as session:
+                url = f"{self.config.base_url}/api/v3/order"
+                
+                async with session.post(url, data=params, headers=headers) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        print(f"🎉 ORDEN DE CIERRE EJECUTADA: {result['orderId']}")
+                        return result
+                    else:
+                        error_text = await response.text()
+                        print(f"❌ Error Binance API: {response.status} - {error_text}")
+                        return None
+                        
+        except Exception as e:
+            print(f"❌ ERROR ejecutando orden de cierre: {e}")
+            return None
+    
+    async def _adjust_quantity_for_symbol(self, symbol: str, quantity: float) -> float:
+        """🔧 Ajustar cantidad según filtros del símbolo"""
+        try:
+            # Obtener información del símbolo
+            async with aiohttp.ClientSession() as session:
+                url = f"{self.config.base_url}/api/v3/exchangeInfo"
+                params = {'symbol': symbol}
+                
+                async with session.get(url, params=params) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        
+                        if 'symbols' in data and len(data['symbols']) > 0:
+                            symbol_info = data['symbols'][0]
+                            
+                            # Buscar filtro LOT_SIZE
+                            for filter_info in symbol_info.get('filters', []):
+                                if filter_info['filterType'] == 'LOT_SIZE':
+                                    step_size = float(filter_info['stepSize'])
+                                    min_qty = float(filter_info['minQty'])
+                                    
+                                    # Ajustar cantidad al step size
+                                    adjusted_qty = max(min_qty, quantity)
+                                    adjusted_qty = round(adjusted_qty / step_size) * step_size
+                                    
+                                    return adjusted_qty
+            
+            # Si no se puede obtener filtros, usar cantidad original
+            return quantity
+            
+        except Exception as e:
+            print(f"❌ Error ajustando cantidad para {symbol}: {e}")
+            return quantity
     
     async def _daily_loss_exceeds_limit(self, max_daily_loss_percent: float = 10.0) -> bool:
         """🚨 Verificar si se ha excedido la pérdida máxima diaria"""
