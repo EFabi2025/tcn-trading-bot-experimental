@@ -66,6 +66,13 @@ cp .env.example .env
 # Editar .env con tus credenciales
 ```
 
+### 5️⃣ **Configurar Base de Datos**
+```bash
+# Copiar configuración de base de datos
+cp trading_database.py.example trading_database.py
+# Editar trading_database.py si necesitas configuración específica
+```
+
 **Configuración mínima en `.env`:**
 ```env
 # Binance API
@@ -82,7 +89,7 @@ MAX_POSITION_SIZE_PERCENT=15
 TRADE_MODE=live
 ```
 
-### 5️⃣ **Ejecutar el Bot**
+### 6️⃣ **Ejecutar el Bot**
 ```bash
 python run_trading_manager.py
 ```
@@ -118,7 +125,7 @@ El sistema mostrará:
 ├── 🛡️ advanced_risk_manager.py       # Gestión de riesgo
 ├── 📊 real_market_data_provider.py   # Datos reales de mercado
 ├── 🔔 smart_discord_notifier.py      # Notificaciones inteligentes
-├── 🗄️ trading_database.py           # Base de datos
+├── 🗄️ trading_database.py.example   # Plantilla de base de datos (copiar como trading_database.py)
 ├── 📈 models/                        # Modelos TCN activos
 │   ├── tcn_final_btcusdt.h5         # ✅ Modelo BTC (50,21)
 │   ├── tcn_final_ethusdt.h5         # ✅ Modelo ETH (50,21)

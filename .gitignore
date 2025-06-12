@@ -25,6 +25,10 @@ trading_bot.db
 positions.db
 backups/*.db
 
+# 🔐 ARCHIVOS DE CONFIGURACIÓN DE BASE DE DATOS
+# =============================================
+trading_database.py
+
 # 📊 LOGS Y REPORTES
 # ==================
 logs/

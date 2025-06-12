@@ -1,0 +1,204 @@
+#!/usr/bin/env python3
+"""
+🗄️ TRADING DATABASE LAYER - EJEMPLO DE CONFIGURACIÓN
+IMPORTANTE: Copiar este archivo como 'trading_database.py' y configurar apropiadamente
+"""
+
+import asyncio
+from datetime import datetime, timezone, timedelta
+from decimal import Decimal
+from typing import Dict, List, Optional, Any
+import json
+import os
+from dataclasses import dataclass, asdict
+import sqlite3
+import aiosqlite
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, Boolean, Float, Numeric
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.dialects.postgresql import UUID
+import uuid
+from dotenv import load_dotenv
+
+# Import condicional de asyncpg solo para PostgreSQL
+try:
+    import asyncpg
+    ASYNCPG_AVAILABLE = True
+except ImportError:
+    ASYNCPG_AVAILABLE = False
+    print("⚠️ asyncpg no disponible - solo SQLite soportado")
+
+load_dotenv()
+
+Base = declarative_base()
+
+class Trade(Base):
+    """💼 Tabla de trades ejecutados"""
+    __tablename__ = 'trades'
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    symbol = Column(String(20), nullable=False, index=True)
+    side = Column(String(4), nullable=False)  # BUY/SELL
+    quantity = Column(Numeric(18, 8), nullable=False)
+    entry_price = Column(Numeric(18, 8), nullable=False)
+    exit_price = Column(Numeric(18, 8), nullable=True)
+    entry_time = Column(DateTime(timezone=True), nullable=False)
+    exit_time = Column(DateTime(timezone=True), nullable=True)
+    pnl_percent = Column(Float, nullable=True)
+    pnl_usd = Column(Numeric(18, 8), nullable=True)
+    stop_loss = Column(Numeric(18, 8), nullable=True)
+    take_profit = Column(Numeric(18, 8), nullable=True)
+    exit_reason = Column(String(50), nullable=True)  # STOP_LOSS, TAKE_PROFIT, MANUAL, etc.
+    confidence = Column(Float, nullable=False)
+    strategy = Column(String(50), nullable=False, default='TCN_ML')
+    is_active = Column(Boolean, default=True)
+    metadata_json = Column(Text, nullable=True)  # JSON con datos adicionales
+    created_at = Column(DateTime(timezone=True), default=datetime.now)
+
+class PerformanceMetric(Base):
+    """📊 Tabla de métricas de performance"""
+    __tablename__ = 'performance_metrics'
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    timestamp = Column(DateTime(timezone=True), nullable=False)
+    total_balance = Column(Numeric(18, 8), nullable=False)
+    daily_pnl = Column(Numeric(18, 8), nullable=False)
+    total_pnl = Column(Numeric(18, 8), nullable=False)
+    daily_return_percent = Column(Float, nullable=False)
+    total_return_percent = Column(Float, nullable=False)
+    current_drawdown = Column(Float, nullable=False)
+    max_drawdown = Column(Float, nullable=False)
+    sharpe_ratio = Column(Float, nullable=True)
+    win_rate = Column(Float, nullable=False)
+    profit_factor = Column(Float, nullable=True)
+    active_positions_count = Column(Integer, nullable=False)
+    total_exposure_usd = Column(Numeric(18, 8), nullable=False)
+    exposure_percent = Column(Float, nullable=False)
+    trades_today = Column(Integer, nullable=False)
+    avg_trade_duration_minutes = Column(Float, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.now)
+
+class SystemLog(Base):
+    """📝 Tabla de logs del sistema"""
+    __tablename__ = 'system_logs'
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    timestamp = Column(DateTime(timezone=True), nullable=False)
+    level = Column(String(10), nullable=False)  # INFO, WARNING, ERROR, CRITICAL
+    category = Column(String(50), nullable=False)  # TRADING, RISK, API, SYSTEM
+    message = Column(Text, nullable=False)
+    symbol = Column(String(20), nullable=True, index=True)
+    metadata_json = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.now)
+
+class RiskEvent(Base):
+    """⚠️ Tabla de eventos de riesgo"""
+    __tablename__ = 'risk_events'
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    timestamp = Column(DateTime(timezone=True), nullable=False)
+    event_type = Column(String(50), nullable=False)  # CIRCUIT_BREAKER, STOP_LOSS, etc.
+    severity = Column(String(20), nullable=False)  # LOW, MEDIUM, HIGH, CRITICAL
+    description = Column(Text, nullable=False)
+    symbol = Column(String(20), nullable=True)
+    action_taken = Column(Text, nullable=True)
+    resolved = Column(Boolean, default=False)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    metadata_json = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.now)
+
+class MarketDataCache(Base):
+    """📈 Cache de datos de mercado"""
+    __tablename__ = 'market_data_cache'
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    symbol = Column(String(20), nullable=False, index=True)
+    timestamp = Column(DateTime(timezone=True), nullable=False)
+    price = Column(Numeric(18, 8), nullable=False)
+    volume = Column(Numeric(18, 8), nullable=True)
+    data_type = Column(String(20), nullable=False)  # KLINE, TICKER, etc.
+    data_json = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.now)
+
+class TradingDatabase:
+    """🗄️ Gestor de base de datos para trading"""
+
+    def __init__(self, database_url: str = None):
+        # CONFIGURAR: Cambiar por tu URL de base de datos real
+        # Para SQLite (desarrollo): 'sqlite:///trading_bot.db'
+        # Para PostgreSQL (producción): 'postgresql://user:password@localhost/dbname'
+        self.database_url = database_url or os.getenv('DATABASE_URL', 'sqlite:///trading_bot_example.db')
+        
+        self.engine = create_engine(self.database_url, echo=False)
+        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
+
+        # Crear tablas si no existen
+        Base.metadata.create_all(bind=self.engine)
+
+        print(f"🗄️ Base de datos inicializada: {self.database_url}")
+
+    def get_session(self):
+        """🔌 Obtener sesión de base de datos"""
+        return self.SessionLocal()
+
+    async def save_trade(self, trade_data: Dict) -> str:
+        """💼 Guardar trade en base de datos"""
+        try:
+            session = self.get_session()
+
+            trade = Trade(
+                symbol=trade_data['symbol'],
+                side=trade_data['side'],
+                quantity=Decimal(str(trade_data['quantity'])),
+                entry_price=Decimal(str(trade_data['entry_price'])),
+                exit_price=Decimal(str(trade_data.get('exit_price', 0))) if trade_data.get('exit_price') else None,
+                entry_time=trade_data['entry_time'],
+                exit_time=trade_data.get('exit_time'),
+                pnl_percent=trade_data.get('pnl_percent'),
+                pnl_usd=Decimal(str(trade_data.get('pnl_usd', 0))) if trade_data.get('pnl_usd') else None,
+                stop_loss=Decimal(str(trade_data.get('stop_loss', 0))) if trade_data.get('stop_loss') else None,
+                take_profit=Decimal(str(trade_data.get('take_profit', 0))) if trade_data.get('take_profit') else None,
+                exit_reason=trade_data.get('exit_reason'),
+                confidence=trade_data.get('confidence', 0.0),
+                strategy=trade_data.get('strategy', 'TCN_ML'),
+                is_active=trade_data.get('is_active', True),
+                metadata_json=json.dumps(trade_data.get('metadata', {}))
+            )
+
+            session.add(trade)
+            session.commit()
+            trade_id = trade.id
+            session.close()
+
+            print(f"💼 Trade guardado: {trade_data['symbol']} {trade_data['side']} - ID: {trade_id}")
+            return trade_id
+
+        except Exception as e:
+            print(f"❌ Error guardando trade: {e}")
+            if 'session' in locals():
+                session.rollback()
+                session.close()
+            return None
+
+    # ... resto de métodos implementados de forma similar ...
+    
+    async def get_trades_history(self, symbol: str = None, days: int = 30, is_active: bool = None) -> List[Dict]:
+        """📊 Obtener historial de trades"""
+        # Implementación completa disponible en archivo real
+        pass
+
+    async def save_performance_metrics(self, metrics: Dict) -> str:
+        """📊 Guardar métricas de performance"""
+        # Implementación completa disponible en archivo real
+        pass
+
+    async def log_event(self, level: str, category: str, message: str, symbol: str = None, metadata: Dict = None):
+        """📝 Registrar evento en logs"""
+        # Implementación completa disponible en archivo real
+        pass
+
+# Ejemplo de uso:
+if __name__ == "__main__":
+    # CONFIGURAR: Tu configuración específica aquí
+    db = TradingDatabase()
+    print("📁 Archivo de ejemplo - Copiar como 'trading_database.py' y configurar apropiadamente") 
