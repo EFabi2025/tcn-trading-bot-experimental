@@ -51,6 +51,38 @@ class TradingConfig:
     # Configuración de base de datos
     database_url: str
 
+    # ✅ NUEVO: Configuración de Diversificación de Portafolio
+    PORTFOLIO_DIVERSIFICATION = {
+        # Límites de concentración por símbolo
+        'MAX_SYMBOL_CONCENTRATION_PERCENT': 40.0,  # Máximo 40% del portafolio en un símbolo
+        'MAX_POSITIONS_PER_SYMBOL': 3,             # Máximo 3 posiciones por símbolo
+        'MIN_SYMBOLS_IN_PORTFOLIO': 2,             # Mínimo 2 símbolos diferentes
+
+        # Diversificación por sectores/categorías
+        'SYMBOL_CATEGORIES': {
+            'BTCUSDT': 'MAJOR_CRYPTO',
+            'ETHUSDT': 'MAJOR_CRYPTO',
+            'BNBUSDT': 'EXCHANGE_TOKEN',
+            'ADAUSDT': 'ALT_CRYPTO',
+            'DOTUSDT': 'ALT_CRYPTO',
+            'SOLUSDT': 'ALT_CRYPTO'
+        },
+        'MAX_CATEGORY_CONCENTRATION_PERCENT': 60.0,  # Máximo 60% en una categoría
+
+        # Gestión de posiciones existentes
+        'RESPECT_EXISTING_POSITIONS': True,         # No liquidar posiciones existentes
+        'GRADUAL_REBALANCING': True,               # Rebalanceo gradual con nuevas órdenes
+        'DIVERSIFICATION_PRIORITY': 0.3,           # Factor de prioridad para diversificación (0-1)
+
+        # Límites de correlación
+        'MAX_CORRELATION_THRESHOLD': 0.8,          # Evitar símbolos muy correlacionados
+        'CORRELATION_LOOKBACK_DAYS': 30,           # Días para calcular correlación
+
+        # Configuración de alertas
+        'ALERT_ON_HIGH_CONCENTRATION': True,       # Alertar cuando concentración > límite
+        'CONCENTRATION_WARNING_THRESHOLD': 35.0,   # Advertir al 35%
+    }
+
 class ConfigManager:
     """📋 Gestor de configuración centralizada"""
 

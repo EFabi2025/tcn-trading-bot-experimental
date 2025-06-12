@@ -29,6 +29,9 @@ from smart_discord_notifier import SmartDiscordNotifier
 # ✅ NUEVO: Importar Professional Portfolio Manager
 from professional_portfolio_manager import ProfessionalPortfolioManager
 
+# ✅ NUEVO: Importar Portfolio Diversification Manager
+from portfolio_diversification_manager import PortfolioDiversificationManager, PortfolioPosition
+
 load_dotenv()
 
 @dataclass
@@ -65,7 +68,8 @@ class SimpleProfessionalTradingManager:
 
         # Configuración básica
         self.config = self._load_config()
-        self.symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT"]
+        # ✅ NUEVO: Más símbolos para mejor diversificación
+        self.symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "ADAUSDT", "DOTUSDT", "SOLUSDT"]
         self.check_interval = 60  # 1 minuto
 
         # Estado del sistema
@@ -76,6 +80,9 @@ class SimpleProfessionalTradingManager:
 
         # ✅ NUEVO: Professional Portfolio Manager
         self.portfolio_manager = None
+
+        # ✅ NUEVO: Portfolio Diversification Manager
+        self.diversification_manager = PortfolioDiversificationManager()
 
         # Balance y trading - ✅ CORREGIDO: Inicializar en 0, obtener de Binance
         self.current_balance = 0.0  # Se actualizará desde Binance
@@ -270,7 +277,7 @@ class SimpleProfessionalTradingManager:
             await self.update_balance_from_binance()
             if self.current_balance == 0:
                 print("⚠️ No se pudo obtener balance de Binance, usando valor por defecto")
-                                        self.current_balance = 100.0  # Fallback mínimo si falla API
+                self.current_balance = 100.0  # Fallback mínimo si falla API
 
             # 3. ✅ NUEVO: Inicializar Professional Portfolio Manager
             print("💼 Inicializando Professional Portfolio Manager...")
@@ -469,22 +476,94 @@ class SimpleProfessionalTradingManager:
                 # Generar reporte TCN
                 tcn_report = self.portfolio_manager.format_tcn_style_report(snapshot)
 
+                # ✅ NUEVO: Agregar reporte de diversificación
+                diversification_report = await self._generate_diversification_section(snapshot)
+
+                # Combinar reportes
+                full_report = tcn_report + diversification_report
+
                 # Mostrar en consola
                 print("\n" + "="*80)
                 print("🎯 REPORTE TCN PROFESSIONAL")
                 print("="*80)
-                print(tcn_report)
+                print(full_report)
                 print("="*80)
 
                 # Enviar a Discord si está configurado
                 if hasattr(self, 'discord_notifier'):
-                    await self._send_tcn_discord_notification(tcn_report)
+                    await self._send_tcn_discord_notification(full_report)
                     self.metrics['tcn_reports_sent'] += 1
 
                 self.last_tcn_report_time = now
 
         except Exception as e:
             print(f"❌ Error generando reporte TCN: {e}")
+
+    async def _generate_diversification_section(self, snapshot) -> str:
+        """🎯 Generar sección de diversificación para el reporte"""
+        try:
+            # Convertir posiciones a formato PortfolioPosition
+            current_positions = []
+            for pos in snapshot.active_positions:
+                portfolio_pos = PortfolioPosition(
+                    symbol=pos.symbol,
+                    quantity=pos.size,  # ✅ CORREGIDO: usar 'size' en lugar de 'quantity'
+                    entry_price=pos.entry_price,
+                    current_price=pos.current_price,
+                    value_usd=pos.market_value,  # ✅ CORREGIDO: usar 'market_value' en lugar de 'value_usd'
+                    percentage=(pos.market_value / snapshot.total_balance_usd * 100) if snapshot.total_balance_usd > 0 else 0,
+                    category=self.diversification_manager.diversification_config['SYMBOL_CATEGORIES'].get(pos.symbol, 'UNKNOWN'),
+                    age_minutes=int((datetime.now() - pos.entry_time).total_seconds() / 60),
+                    pnl_percent=pos.unrealized_pnl_percent  # ✅ CORREGIDO: usar 'unrealized_pnl_percent'
+                )
+                current_positions.append(portfolio_pos)
+
+            # Generar análisis de diversificación
+            analysis = await self.diversification_manager.analyze_portfolio_diversification(current_positions)
+
+            # Crear sección del reporte
+            diversification_section = f"""
+
+🎯 **ANÁLISIS DE DIVERSIFICACIÓN**
+📊 **Score:** {analysis.diversification_score:.1f}/100
+"""
+
+            # Concentraciones por símbolo
+            if analysis.symbol_concentrations:
+                diversification_section += "\n**📈 CONCENTRACIÓN POR SÍMBOLO:**\n"
+                for symbol, conc in sorted(analysis.symbol_concentrations.items(), key=lambda x: x[1], reverse=True):
+                    status = "🔴" if conc > 40 else "🟡" if conc > 35 else "🟢"
+                    diversification_section += f"{status} {symbol}: {conc:.1f}%\n"
+
+            # Concentraciones por categoría
+            if analysis.category_concentrations:
+                diversification_section += "\n**🏷️ CONCENTRACIÓN POR CATEGORÍA:**\n"
+                for category, conc in sorted(analysis.category_concentrations.items(), key=lambda x: x[1], reverse=True):
+                    status = "🔴" if conc > 60 else "🟢"
+                    diversification_section += f"{status} {category}: {conc:.1f}%\n"
+
+            # Alertas importantes
+            if analysis.over_concentrated_symbols or analysis.over_concentrated_categories:
+                diversification_section += "\n**⚠️ ALERTAS:**\n"
+                for symbol in analysis.over_concentrated_symbols:
+                    conc = analysis.symbol_concentrations[symbol]
+                    diversification_section += f"🚨 {symbol} sobre-concentrado: {conc:.1f}%\n"
+
+                for category in analysis.over_concentrated_categories:
+                    conc = analysis.category_concentrations[category]
+                    diversification_section += f"🚨 Categoría {category} sobre-concentrada: {conc:.1f}%\n"
+
+            # Recomendaciones principales (máximo 3)
+            if analysis.recommendations and len(analysis.recommendations) > 0:
+                diversification_section += "\n**💡 RECOMENDACIONES:**\n"
+                for rec in analysis.recommendations[:3]:
+                    diversification_section += f"• {rec}\n"
+
+            return diversification_section
+
+        except Exception as e:
+            print(f"⚠️ Error generando sección de diversificación: {e}")
+            return "\n🎯 **DIVERSIFICACIÓN:** Error al generar análisis\n"
 
     async def _display_professional_info(self):
         """📺 Mostrar información profesional mejorada"""
@@ -759,11 +838,14 @@ class SimpleProfessionalTradingManager:
             await self._consider_new_position(symbol, signal_data)
 
     async def _consider_new_position(self, symbol: str, signal_data: Dict):
-        """📈 Considerar nueva posición"""
+        """📈 Considerar nueva posición con diversificación"""
 
         signal = signal_data['signal']
         confidence = signal_data['confidence']
         current_price = signal_data['current_price']
+
+        # ✅ NUEVO: Verificar diversificación del portafolio ANTES de risk management
+        await self._check_portfolio_diversification_before_trade(symbol, signal_data)
 
         # Verificar límites de riesgo
         can_trade, reason = await self.risk_manager.check_risk_limits_before_trade(
@@ -909,6 +991,92 @@ class SimpleProfessionalTradingManager:
                                              f"🔄 Razón: {reason}")
 
         print(f"📉 Posición cerrada: {symbol} - PnL: {pnl_percent:.2f}% (${pnl_usd:.2f})")
+
+    async def _check_portfolio_diversification_before_trade(self, symbol: str, signal_data: Dict):
+        """🎯 Verificar diversificación antes de ejecutar trade"""
+
+        try:
+            # Obtener posiciones actuales
+            snapshot = await self.portfolio_manager.get_portfolio_snapshot()
+
+            # Convertir a formato PortfolioPosition
+            current_positions = []
+            for pos in snapshot.active_positions:
+                portfolio_pos = PortfolioPosition(
+                    symbol=pos.symbol,
+                    quantity=pos.size,  # ✅ CORREGIDO: usar 'size' en lugar de 'quantity'
+                    entry_price=pos.entry_price,
+                    current_price=pos.current_price,
+                    value_usd=pos.market_value,  # ✅ CORREGIDO: usar 'market_value' en lugar de 'value_usd'
+                    percentage=(pos.market_value / snapshot.total_balance_usd * 100) if snapshot.total_balance_usd > 0 else 0,
+                    category=self.diversification_manager.diversification_config['SYMBOL_CATEGORIES'].get(pos.symbol, 'UNKNOWN'),
+                    age_minutes=int((datetime.now() - pos.entry_time).total_seconds() / 60),
+                    pnl_percent=pos.unrealized_pnl_percent  # ✅ CORREGIDO: usar 'unrealized_pnl_percent'
+                )
+                current_positions.append(portfolio_pos)
+
+            # Calcular tamaño de posición propuesto
+            confidence = signal_data['confidence']
+            current_price = signal_data['current_price']
+
+            # Usar el mismo cálculo que el risk manager
+            position_size_percent = min(15.0, confidence * 20)  # Máximo 15%
+            position_size_usd = (self.current_balance * position_size_percent / 100)
+
+            # Verificar si se permite la nueva posición
+            allowed, reason = await self.diversification_manager.should_allow_new_position(
+                symbol, position_size_usd, current_positions
+            )
+
+            if not allowed:
+                print(f"🚫 DIVERSIFICACIÓN: {reason}")
+                await self.database.log_event('WARNING', 'DIVERSIFICATION', f'Trade bloqueado: {reason}', symbol)
+
+                # Generar reporte de diversificación
+                diversification_report = await self.diversification_manager.generate_diversification_report(current_positions)
+                print(diversification_report)
+
+                # Enviar notificación Discord sobre bloqueo por diversificación
+                await self._send_discord_notification(
+                    f"🚫 **TRADE BLOQUEADO POR DIVERSIFICACIÓN**\n"
+                    f"📊 {symbol}: {signal_data['signal']}\n"
+                    f"⚠️ Razón: {reason}\n"
+                    f"🎯 Confianza perdida: {confidence:.1%}"
+                )
+
+                # Lanzar excepción para detener el trade
+                raise Exception(f"Trade bloqueado por diversificación: {reason}")
+
+            # Ajustar tamaño de posición si es necesario
+            adjusted_size = self.diversification_manager.calculate_diversification_adjusted_size(
+                symbol, position_size_usd, current_positions
+            )
+
+            if adjusted_size < position_size_usd:
+                reduction_percent = ((position_size_usd - adjusted_size) / position_size_usd) * 100
+                print(f"📏 DIVERSIFICACIÓN: Tamaño reducido {reduction_percent:.1f}% para {symbol}")
+                print(f"   💰 Original: ${position_size_usd:.2f} → Ajustado: ${adjusted_size:.2f}")
+
+                # Actualizar signal_data con el tamaño ajustado
+                signal_data['adjusted_size_usd'] = adjusted_size
+                signal_data['diversification_adjustment'] = True
+
+            # Generar análisis de diversificación cada 10 trades
+            if self.trade_count % 10 == 0:
+                analysis = await self.diversification_manager.analyze_portfolio_diversification(current_positions)
+                print(f"📊 DIVERSIFICACIÓN SCORE: {analysis.diversification_score:.1f}/100")
+
+                if analysis.diversification_score < 60:
+                    print("⚠️ ADVERTENCIA: Score de diversificación bajo")
+                    for rec in analysis.recommendations[:3]:  # Solo las 3 principales
+                        print(f"   💡 {rec}")
+
+        except Exception as e:
+            if "Trade bloqueado por diversificación" in str(e):
+                raise  # Re-lanzar bloqueos de diversificación
+            else:
+                print(f"⚠️ Error en verificación de diversificación: {e}")
+                # No bloquear el trade por errores técnicos
 
     async def _heartbeat_monitor(self):
         """💓 Monitor de latido del sistema"""
