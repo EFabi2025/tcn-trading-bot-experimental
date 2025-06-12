@@ -270,7 +270,7 @@ class SimpleProfessionalTradingManager:
             await self.update_balance_from_binance()
             if self.current_balance == 0:
                 print("⚠️ No se pudo obtener balance de Binance, usando valor por defecto")
-                self.current_balance = 102.0  # Fallback
+                                        self.current_balance = 100.0  # Fallback mínimo si falla API
 
             # 3. ✅ NUEVO: Inicializar Professional Portfolio Manager
             print("💼 Inicializando Professional Portfolio Manager...")
@@ -699,9 +699,10 @@ class SimpleProfessionalTradingManager:
                             print(f"  ⏸️ Señal {signal} ignorada - Solo BUY permitido en Spot")
                             continue
 
-                        # 2. Verificar confianza mínima (70%)
-                        if confidence < 0.70:
-                            print(f"  ❌ Confianza insuficiente: {confidence:.1%} < 70%")
+                        # 2. Verificar confianza mínima (configurable desde .env)
+                        min_confidence = float(os.getenv('MIN_CONFIDENCE_THRESHOLD', '0.70'))
+                        if confidence < min_confidence:
+                            print(f"  ❌ Confianza insuficiente: {confidence:.1%} < {min_confidence:.1%}")
                             continue
 
                         # 3. Verificar que no tengamos posición activa en este símbolo
@@ -853,8 +854,10 @@ class SimpleProfessionalTradingManager:
         signal = signal_data['signal']
         confidence = signal_data['confidence']
 
+        # Umbral de reversión configurable desde .env
+        reversal_threshold = float(os.getenv('SIGNAL_REVERSAL_THRESHOLD', '0.85'))
         if ((position.side == 'BUY' and signal == 'SELL') or
-            (position.side == 'SELL' and signal == 'BUY')) and confidence > 0.85:
+            (position.side == 'SELL' and signal == 'BUY')) and confidence > reversal_threshold:
 
             await self._close_position(symbol, "SIGNAL_REVERSAL")
 
@@ -1199,9 +1202,12 @@ class SimpleProfessionalTradingManager:
             print(f"❌ Error ajustando cantidad para {symbol}: {e}")
             return quantity
 
-    async def _daily_loss_exceeds_limit(self, max_daily_loss_percent: float = 10.0) -> bool:
+    async def _daily_loss_exceeds_limit(self, max_daily_loss_percent: float = None) -> bool:
         """🚨 Verificar si se ha excedido la pérdida máxima diaria"""
         try:
+            # Obtener límite desde .env si no se proporciona
+            if max_daily_loss_percent is None:
+                max_daily_loss_percent = float(os.getenv('MAX_DAILY_LOSS_PERCENT', '10.0'))
             # Obtener snapshot actual
             snapshot = await self.portfolio_manager.get_portfolio_snapshot()
 

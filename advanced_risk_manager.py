@@ -37,30 +37,30 @@ class Position:
 
 @dataclass
 class RiskLimits:
-    """⚠️ Límites de riesgo configurables"""
-    max_position_size_percent: float = 15.0  # Máximo % del balance por trade (ajustado para 102 USDT)
-    max_total_exposure_percent: float = 40.0  # Máximo % del balance total expuesto
-    max_daily_loss_percent: float = 10.0  # Máximo % de pérdida diaria
-    max_drawdown_percent: float = 15.0  # Máximo drawdown permitido
-    min_confidence_threshold: float = 0.70  # Mínima confianza para entrar
-    stop_loss_percent: float = 3.0  # Stop loss por defecto
-    take_profit_percent: float = 6.0  # Take profit por defecto
-    trailing_stop_percent: float = 2.0  # Trailing stop
-    max_concurrent_positions: int = 2  # Máximo número de posiciones simultáneas (ajustado)
-    correlation_limit: float = 0.7  # Límite de correlación entre pares
-    min_position_value_usdt: float = 11.0  # Mínimo valor en USDT por posición (Binance)
+    """⚠️ Límites de riesgo configurables - VALORES OBTENIDOS DE .ENV"""
+    max_position_size_percent: float
+    max_total_exposure_percent: float
+    max_daily_loss_percent: float
+    max_drawdown_percent: float
+    min_confidence_threshold: float
+    stop_loss_percent: float
+    take_profit_percent: float
+    trailing_stop_percent: float
+    max_concurrent_positions: int
+    correlation_limit: float
+    min_position_value_usdt: float  # Se obtiene dinámicamente de Binance API
 
 class AdvancedRiskManager:
     """🛡️ Gestor avanzado de riesgo para trading"""
 
     def __init__(self, binance_config):
         self.config = binance_config
-        self.limits = RiskLimits()
+        self.limits = self._load_risk_limits_from_env()
 
-        # Balance inicial ajustado a la realidad
-        self.current_balance = 102.0  # Balance real del usuario
-        self.start_balance = 102.0
-        self.peak_balance = 102.0
+        # Balance se obtiene dinámicamente de Binance API
+        self.current_balance = 0.0  # Se actualizará desde get_account_balance()
+        self.start_balance = 0.0    # Se establecerá en initialize()
+        self.peak_balance = 0.0     # Se actualizará dinámicamente
 
         # Estado del sistema
         self.daily_pnl = 0.0
@@ -81,15 +81,48 @@ class AdvancedRiskManager:
             'largest_loss': 0.0
         }
 
+    def _load_risk_limits_from_env(self) -> RiskLimits:
+        """🔧 Cargar límites de riesgo desde variables de entorno"""
+        import os
+
+        return RiskLimits(
+            max_position_size_percent=float(os.getenv('MAX_POSITION_SIZE_PERCENT', '15.0')),
+            max_total_exposure_percent=float(os.getenv('MAX_TOTAL_EXPOSURE_PERCENT', '40.0')),
+            max_daily_loss_percent=float(os.getenv('MAX_DAILY_LOSS_PERCENT', '10.0')),
+            max_drawdown_percent=float(os.getenv('MAX_DRAWDOWN_PERCENT', '15.0')),
+            min_confidence_threshold=float(os.getenv('MIN_CONFIDENCE_THRESHOLD', '0.70')),
+            stop_loss_percent=float(os.getenv('STOP_LOSS_PERCENT', '3.0')),
+            take_profit_percent=float(os.getenv('TAKE_PROFIT_PERCENT', '6.0')),
+            trailing_stop_percent=float(os.getenv('TRAILING_STOP_PERCENT', '2.0')),
+            max_concurrent_positions=int(os.getenv('MAX_CONCURRENT_POSITIONS', '2')),
+            correlation_limit=float(os.getenv('CORRELATION_LIMIT', '0.7')),
+            min_position_value_usdt=11.0  # Se actualizará dinámicamente desde Binance
+        )
+
     async def initialize(self):
         """🚀 Inicializar el risk manager"""
         print("🛡️ Inicializando Advanced Risk Manager...")
+
+        # 💰 OBTENER BALANCE REAL DE BINANCE API
+        print("💰 Obteniendo balance real de Binance...")
+        real_balance = await self.get_account_balance()
+
+        if real_balance > 0:
+            self.current_balance = real_balance
+            self.start_balance = real_balance
+            self.peak_balance = real_balance
+            print(f"✅ Balance obtenido de Binance: ${real_balance:.2f}")
+        else:
+            print("❌ Error obteniendo balance de Binance, usando valores por defecto")
+            self.current_balance = 100.0  # Fallback mínimo
+            self.start_balance = 100.0
+            self.peak_balance = 100.0
 
         # Verificar balance mínimo para trading
         if self.current_balance < 50.0:
             print("⚠️ ADVERTENCIA: Balance muy bajo para trading seguro")
 
-        print(f"💰 Balance inicial: ${self.current_balance:.2f}")
+        print(f"💰 Balance para trading: ${self.current_balance:.2f}")
         print(f"💡 Con {self.current_balance:.0f} USDT puedes hacer:")
 
         # Calcular posiciones posibles
