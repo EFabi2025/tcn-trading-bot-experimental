@@ -125,7 +125,7 @@ python main_educational.py
 ### **3. Servicios SOLID en Acción**
 
 - **EducationalBinanceClient** → Interface ITradingClient
-- **EducationalMLPredictor** → Interface IMLPredictor  
+- **EducationalMLPredictor** → Interface IMLPredictor
 - **EducationalRiskManager** → Interface IRiskManager
 - **EducationalTradingOrchestrator** → Coordinador principal
 
@@ -282,4 +282,4 @@ Al completar esta experimentación habrás aprendido:
 
 **🎓 ¡Disfruta experimentando y aprendiendo!**
 
-**Recuerda**: Este es un proyecto puramente educacional. Nunca uses dinero real para trading algorítmico sin una comprensión profunda de los riesgos involucrados. 
+**Recuerda**: Este es un proyecto puramente educacional. Nunca uses dinero real para trading algorítmico sin una comprensión profunda de los riesgos involucrados.

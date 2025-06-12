@@ -1,0 +1,34 @@
+repos:
+  # Validaciones básicas de archivos
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: check-added-large-files
+        args: ['--maxkb=10000']
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+
+  # Hook personalizado para validar archivos .env
+  - repo: local
+    hooks:
+      - id: check-env-files
+        name: Verificar archivos .env
+        entry: bash -c 'if [[ -n $(git diff --cached --name-only | grep -E "\.env$|\.env\.") ]]; then echo "PELIGRO - Archivo .env detectado"; exit 1; fi'
+        language: system
+        stages: [commit]
+
+      - id: check-api-keys
+        name: Detectar posibles API keys
+        entry: bash -c 'if git diff --cached | grep -iE "(api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token|binance[_-]?(api|secret)|discord[_-]?webhook)" | grep -v "example\|placeholder\|your_\|xxx\|REDACTED\|tu_clave_real\|tu_secreto_real\|fake_key_123\|SECURITY_GUIDE"; then echo "PELIGRO - Posible credencial detectada"; exit 1; fi'
+        language: system
+        stages: [commit]
+
+      - id: check-hardcoded-secrets
+        name: Buscar secrets hardcodeados
+        entry: bash -c 'if git diff --cached | grep -E "[\"]\w{20,}[\"]\s*$" | grep -v "example\|placeholder\|test"; then echo "PELIGRO - Posible secret hardcodeado detectado"; exit 1; fi'
+        language: system
+        stages: [commit]

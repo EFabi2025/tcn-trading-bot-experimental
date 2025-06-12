@@ -1,7 +1,7 @@
 # 🚀 SETUP COMPLETO - TRADING BOT PROFESIONAL
 
 ## 📋 **REQUISITOS PREVIOS**
-- Python 3.8+ 
+- Python 3.8+
 - Git
 - Cuenta Binance (Testnet o Real)
 - Discord Webhook (opcional)
@@ -183,4 +183,4 @@ Si encuentras problemas:
 3. Revisar logs en `trading_bot.db`
 4. Asegurar balance mínimo en Binance
 
-¡**Tu sistema de trading profesional estará listo para funcionar**! 🚀 
+¡**Tu sistema de trading profesional estará listo para funcionar**! 🚀

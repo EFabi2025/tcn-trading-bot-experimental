@@ -20,7 +20,7 @@ def check_python_version():
     """Verificar versión de Python"""
     version = sys.version_info
     print(f"🐍 Python: {version.major}.{version.minor}.{version.micro}")
-    
+
     if version.major >= 3 and version.minor >= 8:
         print("✅ Versión de Python correcta")
         return True
@@ -40,7 +40,7 @@ def check_dependencies():
         ('sqlite3', 'Base de datos (built-in)'),
         ('asyncio', 'Programación asíncrona (built-in)')
     ]
-    
+
     all_ok = True
     for module_name, description in dependencies:
         try:
@@ -52,7 +52,7 @@ def check_dependencies():
         except ImportError:
             print(f"❌ {module_name}: FALTANTE - {description}")
             all_ok = False
-    
+
     return all_ok
 
 def check_core_files():
@@ -65,7 +65,7 @@ def check_core_files():
         'trading_database.py': 'Sistema de base de datos',
         'smart_discord_notifier.py': 'Notificaciones Discord'
     }
-    
+
     all_ok = True
     for file_name, description in core_files.items():
         if Path(file_name).exists():
@@ -73,7 +73,7 @@ def check_core_files():
         else:
             print(f"❌ {file_name}: FALTANTE - {description}")
             all_ok = False
-    
+
     return all_ok
 
 def check_model_files():
@@ -83,12 +83,12 @@ def check_model_files():
         'best_model_*.h5',
         'ultra_model_*.h5'
     ]
-    
+
     models_found = []
     for pattern in model_patterns:
         models = list(Path('.').glob(pattern))
         models_found.extend(models)
-    
+
     if models_found:
         print(f"✅ Modelos ML encontrados: {len(models_found)}")
         for model in models_found[:5]:  # Mostrar solo los primeros 5
@@ -105,23 +105,23 @@ def check_environment_file():
     """Verificar archivo de configuración"""
     env_file = Path('.env')
     env_example = Path('.env.example')
-    
+
     if not env_file.exists():
         print("❌ Archivo .env no encontrado")
         if env_example.exists():
             print("   💡 Ejecuta: cp .env.example .env")
         return False
-    
+
     # Cargar variables de entorno
     load_dotenv()
-    
+
     required_vars = [
         'BINANCE_API_KEY',
-        'BINANCE_SECRET_KEY', 
+        'BINANCE_SECRET_KEY',
         'BINANCE_BASE_URL',
         'ENVIRONMENT'
     ]
-    
+
     all_configured = True
     for var in required_vars:
         value = os.getenv(var)
@@ -135,7 +135,7 @@ def check_environment_file():
             else:
                 display_value = value
             print(f"✅ {var}: {display_value}")
-    
+
     return all_configured
 
 def check_binance_connection():
@@ -146,17 +146,17 @@ def check_binance_connection():
         import hmac
         import hashlib
         import time
-        
+
         load_dotenv()
-        
+
         api_key = os.getenv('BINANCE_API_KEY')
         secret_key = os.getenv('BINANCE_SECRET_KEY')
         base_url = os.getenv('BINANCE_BASE_URL')
-        
+
         if not all([api_key, secret_key, base_url]):
             print("❌ Credenciales de Binance no configuradas")
             return False
-        
+
         async def test_connection():
             try:
                 # Test básico de conectividad
@@ -171,10 +171,10 @@ def check_binance_connection():
             except Exception as e:
                 print(f"❌ Error conectando con Binance: {e}")
                 return False
-        
+
         # Ejecutar test asíncrono
         return asyncio.run(test_connection())
-        
+
     except ImportError as e:
         print(f"❌ Error importando módulos para test Binance: {e}")
         return False
@@ -186,17 +186,17 @@ def check_database():
     """Verificar sistema de base de datos"""
     try:
         import sqlite3
-        
+
         # Test conexión SQLite
         conn = sqlite3.connect(':memory:')
         cursor = conn.cursor()
         cursor.execute('SELECT sqlite_version()')
         version = cursor.fetchone()[0]
         conn.close()
-        
+
         print(f"✅ SQLite: {version}")
         return True
-        
+
     except Exception as e:
         print(f"❌ Error en SQLite: {e}")
         return False
@@ -206,19 +206,19 @@ def run_system_test():
     try:
         # Importar y crear instancia del manager
         from simple_professional_manager import SimpleProfessionalTradingManager
-        
+
         manager = SimpleProfessionalTradingManager()
         print("✅ Sistema principal: Puede instanciarse")
-        
+
         # Test configuración
         config = manager._load_config()
         if config.api_key and config.secret_key:
             print("✅ Configuración: Credenciales cargadas")
         else:
             print("⚠️ Configuración: Credenciales no configuradas")
-        
+
         return True
-        
+
     except ImportError as e:
         print(f"❌ Error importando sistema principal: {e}")
         return False
@@ -230,17 +230,17 @@ def print_summary(results):
     """Imprimir resumen de verificación"""
     print(f"\n{'🎯 RESUMEN DE VERIFICACIÓN':^60}")
     print("="*60)
-    
+
     passed = sum(results.values())
     total = len(results)
-    
+
     for test, result in results.items():
         status = "✅ PASS" if result else "❌ FAIL"
         print(f"{test:.<40} {status}")
-    
+
     print("="*60)
     print(f"📊 RESULTADO: {passed}/{total} verificaciones exitosas")
-    
+
     if passed == total:
         print("🎉 ¡INSTALACIÓN COMPLETA Y FUNCIONAL!")
         print("🚀 Ya puedes ejecutar: python run_trading_manager.py")
@@ -256,34 +256,34 @@ def main():
     print("🧪 VERIFICACIÓN DE INSTALACIÓN - TRADING BOT PROFESIONAL")
     print("="*60)
     print("🎯 Verificando que toda la instalación esté correcta...")
-    
+
     results = {}
-    
+
     # Verificación Python
     print_section("PYTHON Y DEPENDENCIAS")
     results['Python Version'] = check_python_version()
     results['Dependencies'] = check_dependencies()
-    
+
     # Verificación archivos
     print_section("ARCHIVOS DEL SISTEMA")
     results['Core Files'] = check_core_files()
     results['ML Models'] = check_model_files()
-    
+
     # Verificación configuración
     print_section("CONFIGURACIÓN")
     results['Environment File'] = check_environment_file()
     results['Database'] = check_database()
-    
+
     # Verificación conectividad
     print_section("CONECTIVIDAD")
     results['Binance Connection'] = check_binance_connection()
-    
+
     # Test del sistema
     print_section("SISTEMA PRINCIPAL")
     results['System Test'] = run_system_test()
-    
+
     # Resumen final
     print_summary(results)
 
 if __name__ == "__main__":
-    main() 
+    main()

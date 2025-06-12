@@ -138,7 +138,7 @@ El sistema mostrará:
 ### 🛡️ **Gestión de Riesgo**
 ```python
 # En advanced_risk_manager.py
-max_position_percent = 15.0    # 15% máximo por posición  
+max_position_percent = 15.0    # 15% máximo por posición
 max_daily_loss_percent = 10.0  # 10% pérdida máxima diaria
 stop_loss_percent = 3.0        # 3% stop loss
 take_profit_percent = 6.0      # 6% take profit

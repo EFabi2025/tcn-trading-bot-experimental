@@ -256,4 +256,4 @@ dev_settings.py
 # config_example.env
 # install.sh
 # LICENSE
-# models/tcn_final_*.h5 (modelos de producción) 
+# models/tcn_final_*.h5 (modelos de producción)

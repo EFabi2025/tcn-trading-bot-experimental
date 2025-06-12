@@ -16,7 +16,7 @@
 ```
 ✅ Single Responsibility - Cada clase una responsabilidad
 ✅ Open/Closed - Extensible sin modificar
-✅ Liskov Substitution - Interfaces intercambiables  
+✅ Liskov Substitution - Interfaces intercambiables
 ✅ Interface Segregation - Contratos específicos
 ✅ Dependency Inversion - Inyección de dependencias
 ```
@@ -116,13 +116,13 @@ CIRCUIT_BREAKER_THRESHOLD=0.03   # 🚨 3% para activar parada
 ## 🎯 Mensaje Final
 
 > **Este proyecto demuestra que se puede construir software profesional con fines educacionales.**
-> 
+>
 > - ✅ Arquitectura limpia y escalable
 > - ✅ Buenas prácticas de la industria
 > - ✅ Seguridad desde el diseño
 > - ✅ Documentación completa
 > - ✅ Enfoque experimental responsable
-> 
+>
 > **¡Perfecto para aprender y compartir conocimiento!** 🚀
 
 ---
@@ -136,6 +136,6 @@ CIRCUIT_BREAKER_THRESHOLD=0.03   # 🚨 3% para activar parada
 
 ---
 
-**Fecha**: Enero 2025  
-**Estado**: Base educacional completada ✅  
-**Próximo**: Experimentos opcionales de integración 🧪 
+**Fecha**: Enero 2025
+**Estado**: Base educacional completada ✅
+**Próximo**: Experimentos opcionales de integración 🧪

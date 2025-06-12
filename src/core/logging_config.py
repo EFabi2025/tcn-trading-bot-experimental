@@ -20,31 +20,31 @@ from .config import get_settings
 def configure_logging() -> None:
     """
     Configura el sistema de logging estructurado.
-    
+
     Establece procesadores, formateadores y handlers según la configuración
     del sistema, incluyendo logging a archivos con rotación.
     """
     settings = get_settings()
-    
+
     # Crear directorio de logs si no existe
     log_path = Path(settings.log_file_path)
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Configurar logging estándar de Python
     logging.basicConfig(
         format="%(message)s",
         stream=sys.stdout,
         level=getattr(logging, settings.log_level)
     )
-    
+
     # Configurar procesadores de structlog
     processors = [
         # Añadir timestamp ISO
         TimeStamper(fmt="iso"),
-        
+
         # Añadir nivel de log
         add_log_level,
-        
+
         # Añadir información de ubicación del código (solo en debug)
         CallsiteParameterAdder(
             parameters=[
@@ -53,11 +53,11 @@ def configure_logging() -> None:
                 CallsiteParameterAdder.FuncName,
             ]
         ) if settings.debug_mode else lambda _, __, event_dict: event_dict,
-        
+
         # Procesador para stdlib logging
         structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
     ]
-    
+
     # Configurar structlog
     structlog.configure(
         processors=processors,
@@ -65,7 +65,7 @@ def configure_logging() -> None:
         logger_factory=LoggerFactory(),
         cache_logger_on_first_use=True,
     )
-    
+
     # Configurar handler para archivo si está habilitado
     if settings.log_to_file:
         setup_file_logging(settings)
@@ -74,12 +74,12 @@ def configure_logging() -> None:
 def setup_file_logging(settings) -> None:
     """
     Configura logging a archivo con rotación.
-    
+
     Args:
         settings: Configuración del sistema
     """
     from logging.handlers import TimedRotatingFileHandler
-    
+
     # Handler para archivo con rotación
     file_handler = TimedRotatingFileHandler(
         filename=settings.log_file_path,
@@ -88,14 +88,14 @@ def setup_file_logging(settings) -> None:
         backupCount=settings.log_retention,
         encoding='utf-8'
     )
-    
+
     # Formateador JSON para archivo
     file_formatter = structlog.stdlib.ProcessorFormatter(
         processor=JSONRenderer(),
     )
     file_handler.setFormatter(file_formatter)
     file_handler.setLevel(getattr(logging, settings.log_level))
-    
+
     # Añadir handler al root logger
     root_logger = logging.getLogger()
     root_logger.addHandler(file_handler)
@@ -104,28 +104,28 @@ def setup_file_logging(settings) -> None:
 class TradingLogger:
     """
     Logger específico para trading con contexto estructurado.
-    
+
     Proporciona métodos especializados para logging de eventos
     de trading con información estructurada relevante.
     """
-    
+
     def __init__(self, name: str):
         """
         Inicializa el logger.
-        
+
         Args:
             name: Nombre del logger (generalmente __name__)
         """
         self.logger = get_logger(name)
         self._context: Dict[str, Any] = {}
-    
+
     def bind(self, **kwargs) -> 'TradingLogger':
         """
         Crea un nuevo logger con contexto adicional.
-        
+
         Args:
             **kwargs: Contexto adicional para el logger
-            
+
         Returns:
             Nuevo logger con contexto vinculado
         """
@@ -133,34 +133,34 @@ class TradingLogger:
         new_logger.logger = self.logger.bind(**kwargs)
         new_logger._context = {**self._context, **kwargs}
         return new_logger
-    
+
     def info(self, msg: str, **kwargs) -> None:
         """Log de información."""
         self.logger.info(msg, **kwargs)
-    
+
     def debug(self, msg: str, **kwargs) -> None:
         """Log de debug."""
         self.logger.debug(msg, **kwargs)
-    
+
     def warning(self, msg: str, **kwargs) -> None:
         """Log de advertencia."""
         self.logger.warning(msg, **kwargs)
-    
+
     def error(self, msg: str, **kwargs) -> None:
         """Log de error."""
         self.logger.error(msg, **kwargs)
-    
+
     def critical(self, msg: str, **kwargs) -> None:
         """Log crítico."""
         self.logger.critical(msg, **kwargs)
-    
+
     # === MÉTODOS ESPECIALIZADOS PARA TRADING ===
-    
-    def log_signal(self, symbol: str, action: str, confidence: float, 
+
+    def log_signal(self, symbol: str, action: str, confidence: float,
                    predicted_price: float, **kwargs) -> None:
         """
         Log de señal de trading generada.
-        
+
         Args:
             symbol: Símbolo del par
             action: Acción (BUY/SELL)
@@ -177,12 +177,12 @@ class TradingLogger:
             predicted_price=predicted_price,
             **kwargs
         )
-    
+
     def log_order_created(self, order_id: str, symbol: str, side: str,
                          quantity: float, price: float, **kwargs) -> None:
         """
         Log de orden creada.
-        
+
         Args:
             order_id: ID de la orden
             symbol: Símbolo del par
@@ -201,13 +201,13 @@ class TradingLogger:
             price=price,
             **kwargs
         )
-    
+
     def log_order_filled(self, order_id: str, symbol: str, side: str,
                         filled_quantity: float, avg_price: float,
                         commission: float, **kwargs) -> None:
         """
         Log de orden ejecutada.
-        
+
         Args:
             order_id: ID de la orden
             symbol: Símbolo del par
@@ -228,12 +228,12 @@ class TradingLogger:
             commission=commission,
             **kwargs
         )
-    
+
     def log_balance_update(self, asset: str, free: float, locked: float,
                           previous_free: float = None, **kwargs) -> None:
         """
         Log de actualización de balance.
-        
+
         Args:
             asset: Asset actualizado
             free: Balance libre
@@ -248,17 +248,17 @@ class TradingLogger:
             "locked": locked,
             "total": free + locked,
         }
-        
+
         if previous_free is not None:
             log_data["change"] = free - previous_free
-        
+
         self.info("balance_updated", **log_data, **kwargs)
-    
+
     def log_risk_check(self, symbol: str, check_type: str, passed: bool,
                       reason: str = None, **kwargs) -> None:
         """
         Log de verificación de riesgo.
-        
+
         Args:
             symbol: Símbolo verificado
             check_type: Tipo de verificación
@@ -267,25 +267,25 @@ class TradingLogger:
             **kwargs: Contexto adicional
         """
         level = "info" if passed else "warning"
-        
+
         log_data = {
             "event_type": "risk_check",
             "symbol": symbol,
             "check_type": check_type,
             "passed": passed,
         }
-        
+
         if reason:
             log_data["reason"] = reason
-        
+
         getattr(self, level)("risk_check_performed", **log_data, **kwargs)
-    
+
     def log_model_prediction(self, symbol: str, confidence: float,
                            prediction: str, features_count: int,
                            processing_time_ms: float, **kwargs) -> None:
         """
         Log de predicción del modelo ML.
-        
+
         Args:
             symbol: Símbolo analizado
             confidence: Confianza de la predicción
@@ -304,12 +304,12 @@ class TradingLogger:
             processing_time_ms=processing_time_ms,
             **kwargs
         )
-    
+
     def log_error_with_context(self, error: Exception, context: str,
                               symbol: str = None, **kwargs) -> None:
         """
         Log de error con contexto completo.
-        
+
         Args:
             error: Excepción ocurrida
             context: Contexto donde ocurrió el error
@@ -322,18 +322,18 @@ class TradingLogger:
             "error_message": str(error),
             "context": context,
         }
-        
+
         if symbol:
             log_data["symbol"] = symbol
-        
+
         self.error("error_occurred", **log_data, **kwargs)
-    
+
     def log_performance_metric(self, metric_name: str, value: float,
                               symbol: str = None, timeframe: str = None,
                               **kwargs) -> None:
         """
         Log de métricas de performance.
-        
+
         Args:
             metric_name: Nombre de la métrica
             value: Valor de la métrica
@@ -346,22 +346,22 @@ class TradingLogger:
             "metric_name": metric_name,
             "value": value,
         }
-        
+
         if symbol:
             log_data["symbol"] = symbol
         if timeframe:
             log_data["timeframe"] = timeframe
-        
+
         self.info("performance_metric", **log_data, **kwargs)
 
 
 def get_trading_logger(name: str) -> TradingLogger:
     """
     Factory function para obtener un logger de trading.
-    
+
     Args:
         name: Nombre del logger (generalmente __name__)
-        
+
     Returns:
         Instancia de TradingLogger configurada
     """
@@ -369,4 +369,4 @@ def get_trading_logger(name: str) -> TradingLogger:
 
 
 # Configurar logging al importar el módulo
-configure_logging() 
+configure_logging()

@@ -35,7 +35,7 @@ Base = declarative_base()
 class Trade(Base):
     """💼 Tabla de trades ejecutados"""
     __tablename__ = 'trades'
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     symbol = Column(String(20), nullable=False, index=True)
     side = Column(String(4), nullable=False)  # BUY/SELL
@@ -58,7 +58,7 @@ class Trade(Base):
 class PerformanceMetric(Base):
     """📊 Tabla de métricas de performance"""
     __tablename__ = 'performance_metrics'
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     timestamp = Column(DateTime(timezone=True), nullable=False)
     total_balance = Column(Numeric(18, 8), nullable=False)
@@ -81,7 +81,7 @@ class PerformanceMetric(Base):
 class SystemLog(Base):
     """📝 Tabla de logs del sistema"""
     __tablename__ = 'system_logs'
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     timestamp = Column(DateTime(timezone=True), nullable=False)
     level = Column(String(10), nullable=False)  # INFO, WARNING, ERROR, CRITICAL
@@ -94,7 +94,7 @@ class SystemLog(Base):
 class RiskEvent(Base):
     """⚠️ Tabla de eventos de riesgo"""
     __tablename__ = 'risk_events'
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     timestamp = Column(DateTime(timezone=True), nullable=False)
     event_type = Column(String(50), nullable=False)  # CIRCUIT_BREAKER, STOP_LOSS, etc.
@@ -110,7 +110,7 @@ class RiskEvent(Base):
 class MarketDataCache(Base):
     """📈 Cache de datos de mercado"""
     __tablename__ = 'market_data_cache'
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     symbol = Column(String(20), nullable=False, index=True)
     timestamp = Column(DateTime(timezone=True), nullable=False)
@@ -122,26 +122,26 @@ class MarketDataCache(Base):
 
 class TradingDatabase:
     """🗄️ Gestor de base de datos para trading"""
-    
+
     def __init__(self, database_url: str = None):
         self.database_url = database_url or os.getenv('DATABASE_URL', 'sqlite:///trading_bot.db')
         self.engine = create_engine(self.database_url, echo=False)
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
-        
+
         # Crear tablas si no existen
         Base.metadata.create_all(bind=self.engine)
-        
+
         print(f"🗄️ Base de datos inicializada: {self.database_url}")
-    
+
     def get_session(self):
         """🔌 Obtener sesión de base de datos"""
         return self.SessionLocal()
-    
+
     async def save_trade(self, trade_data: Dict) -> str:
         """💼 Guardar trade en base de datos"""
         try:
             session = self.get_session()
-            
+
             trade = Trade(
                 symbol=trade_data['symbol'],
                 side=trade_data['side'],
@@ -160,27 +160,27 @@ class TradingDatabase:
                 is_active=trade_data.get('is_active', True),
                 metadata_json=json.dumps(trade_data.get('metadata', {}))
             )
-            
+
             session.add(trade)
             session.commit()
             trade_id = trade.id
             session.close()
-            
+
             print(f"💼 Trade guardado: {trade_data['symbol']} {trade_data['side']} - ID: {trade_id}")
             return trade_id
-            
+
         except Exception as e:
             print(f"❌ Error guardando trade: {e}")
             if 'session' in locals():
                 session.rollback()
                 session.close()
             return None
-    
+
     async def update_trade_exit(self, trade_id: str, exit_data: Dict) -> bool:
         """📉 Actualizar trade al cerrar posición"""
         try:
             session = self.get_session()
-            
+
             trade = session.query(Trade).filter(Trade.id == trade_id).first()
             if trade:
                 trade.exit_price = Decimal(str(exit_data['exit_price']))
@@ -189,28 +189,28 @@ class TradingDatabase:
                 trade.pnl_usd = Decimal(str(exit_data['pnl_usd']))
                 trade.exit_reason = exit_data['exit_reason']
                 trade.is_active = False
-                
+
                 session.commit()
                 session.close()
-                
+
                 print(f"📉 Trade actualizado al cerrar: {trade_id}")
                 return True
-            
+
             session.close()
             return False
-            
+
         except Exception as e:
             print(f"❌ Error actualizando trade: {e}")
             if 'session' in locals():
                 session.rollback()
                 session.close()
             return False
-    
+
     async def save_performance_metrics(self, metrics: Dict) -> str:
         """📊 Guardar métricas de performance"""
         try:
             session = self.get_session()
-            
+
             metric = PerformanceMetric(
                 timestamp=datetime.now(timezone.utc),
                 total_balance=Decimal(str(metrics['total_balance'])),
@@ -229,26 +229,26 @@ class TradingDatabase:
                 trades_today=metrics['trades_today'],
                 avg_trade_duration_minutes=metrics.get('avg_trade_duration_minutes')
             )
-            
+
             session.add(metric)
             session.commit()
             metric_id = metric.id
             session.close()
-            
+
             return metric_id
-            
+
         except Exception as e:
             print(f"❌ Error guardando métricas: {e}")
             if 'session' in locals():
                 session.rollback()
                 session.close()
             return None
-    
+
     async def log_event(self, level: str, category: str, message: str, symbol: str = None, metadata: Dict = None):
         """📝 Guardar evento en logs"""
         try:
             session = self.get_session()
-            
+
             log = SystemLog(
                 timestamp=datetime.now(timezone.utc),
                 level=level.upper(),
@@ -257,27 +257,27 @@ class TradingDatabase:
                 symbol=symbol,
                 metadata_json=json.dumps(metadata or {})
             )
-            
+
             session.add(log)
             session.commit()
             session.close()
-            
+
             # También imprimir en consola
             timestamp = datetime.now().strftime('%H:%M:%S')
             print(f"[{timestamp}] {level} {category}: {message}")
-            
+
         except Exception as e:
             print(f"❌ Error guardando log: {e}")
             if 'session' in locals():
                 session.rollback()
                 session.close()
-    
-    async def log_risk_event(self, event_type: str, severity: str, description: str, 
+
+    async def log_risk_event(self, event_type: str, severity: str, description: str,
                            symbol: str = None, action_taken: str = None, metadata: Dict = None):
         """⚠️ Guardar evento de riesgo"""
         try:
             session = self.get_session()
-            
+
             risk_event = RiskEvent(
                 timestamp=datetime.now(timezone.utc),
                 event_type=event_type.upper(),
@@ -287,41 +287,41 @@ class TradingDatabase:
                 action_taken=action_taken,
                 metadata_json=json.dumps(metadata or {})
             )
-            
+
             session.add(risk_event)
             session.commit()
             session.close()
-            
+
             # Log crítico también en consola
             if severity.upper() in ['HIGH', 'CRITICAL']:
                 print(f"🚨 RISK EVENT: {event_type} - {description}")
-            
+
         except Exception as e:
             print(f"❌ Error guardando evento de riesgo: {e}")
             if 'session' in locals():
                 session.rollback()
                 session.close()
-    
-    async def get_trades_history(self, symbol: str = None, days: int = 30, 
+
+    async def get_trades_history(self, symbol: str = None, days: int = 30,
                                is_active: bool = None) -> List[Dict]:
         """📈 Obtener historial de trades"""
         try:
             session = self.get_session()
-            
+
             query = session.query(Trade)
-            
+
             if symbol:
                 query = query.filter(Trade.symbol == symbol)
-            
+
             if is_active is not None:
                 query = query.filter(Trade.is_active == is_active)
-            
+
             if days:
                 cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
                 query = query.filter(Trade.entry_time >= cutoff_date)
-            
+
             trades = query.order_by(Trade.entry_time.desc()).limit(1000).all()
-            
+
             result = []
             for trade in trades:
                 trade_dict = {
@@ -342,54 +342,54 @@ class TradingDatabase:
                     'metadata': json.loads(trade.metadata_json) if trade.metadata_json else {}
                 }
                 result.append(trade_dict)
-            
+
             session.close()
             return result
-            
+
         except Exception as e:
             print(f"❌ Error obteniendo historial: {e}")
             if 'session' in locals():
                 session.close()
             return []
-    
+
     async def get_performance_summary(self, days: int = 30) -> Dict:
         """📊 Obtener resumen de performance"""
         try:
             session = self.get_session()
-            
+
             # Trades cerrados en los últimos días
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
             trades = session.query(Trade).filter(
                 Trade.is_active == False,
                 Trade.exit_time >= cutoff_date
             ).all()
-            
+
             if not trades:
                 session.close()
                 return {'error': 'No hay trades en el período especificado'}
-            
+
             # Calcular métricas
             total_trades = len(trades)
             winning_trades = [t for t in trades if t.pnl_usd and t.pnl_usd > 0]
             losing_trades = [t for t in trades if t.pnl_usd and t.pnl_usd <= 0]
-            
+
             win_rate = len(winning_trades) / total_trades * 100
-            
+
             total_pnl = sum(float(t.pnl_usd) for t in trades if t.pnl_usd)
             avg_win = sum(float(t.pnl_usd) for t in winning_trades) / len(winning_trades) if winning_trades else 0
             avg_loss = sum(float(t.pnl_usd) for t in losing_trades) / len(losing_trades) if losing_trades else 0
-            
+
             profit_factor = abs(avg_win / avg_loss) if avg_loss != 0 else 0
-            
+
             # Duración promedio
             durations = []
             for trade in trades:
                 if trade.exit_time and trade.entry_time:
                     duration = (trade.exit_time - trade.entry_time).total_seconds() / 60
                     durations.append(duration)
-            
+
             avg_duration = sum(durations) / len(durations) if durations else 0
-            
+
             summary = {
                 'period_days': days,
                 'total_trades': total_trades,
@@ -404,55 +404,55 @@ class TradingDatabase:
                 'best_trade': max((float(t.pnl_usd) for t in trades if t.pnl_usd), default=0),
                 'worst_trade': min((float(t.pnl_usd) for t in trades if t.pnl_usd), default=0)
             }
-            
+
             session.close()
             return summary
-            
+
         except Exception as e:
             print(f"❌ Error calculando performance: {e}")
             if 'session' in locals():
                 session.close()
             return {'error': str(e)}
-    
+
     async def cleanup_old_data(self, days_to_keep: int = 90):
         """🧹 Limpiar datos antiguos"""
         try:
             session = self.get_session()
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_to_keep)
-            
+
             # Limpiar logs antiguos
             old_logs = session.query(SystemLog).filter(SystemLog.created_at < cutoff_date).count()
             session.query(SystemLog).filter(SystemLog.created_at < cutoff_date).delete()
-            
+
             # Limpiar métricas antiguas (mantener solo 1 por día)
             old_metrics = session.query(PerformanceMetric).filter(PerformanceMetric.created_at < cutoff_date).count()
             session.query(PerformanceMetric).filter(PerformanceMetric.created_at < cutoff_date).delete()
-            
+
             # Limpiar cache de market data
             old_cache = session.query(MarketDataCache).filter(MarketDataCache.created_at < cutoff_date).count()
             session.query(MarketDataCache).filter(MarketDataCache.created_at < cutoff_date).delete()
-            
+
             session.commit()
             session.close()
-            
+
             print(f"🧹 Datos antiguos eliminados:")
             print(f"   📝 Logs: {old_logs}")
             print(f"   📊 Métricas: {old_metrics}")
             print(f"   📈 Cache: {old_cache}")
-            
+
         except Exception as e:
             print(f"❌ Error limpiando datos: {e}")
             if 'session' in locals():
                 session.rollback()
                 session.close()
-    
+
     async def backup_database(self, backup_path: str = None) -> str:
         """💾 Crear backup de la base de datos"""
         try:
             if not backup_path:
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                 backup_path = f"backup_trading_db_{timestamp}.sql"
-            
+
             # Para SQLite
             if 'sqlite' in self.database_url:
                 import shutil
@@ -460,7 +460,7 @@ class TradingDatabase:
                 shutil.copy2(db_path, backup_path)
                 print(f"💾 Backup creado: {backup_path}")
                 return backup_path
-            
+
             # Para PostgreSQL (requiere pg_dump)
             elif 'postgresql' in self.database_url:
                 import subprocess
@@ -468,7 +468,7 @@ class TradingDatabase:
                 subprocess.run(cmd, shell=True, check=True)
                 print(f"💾 Backup PostgreSQL creado: {backup_path}")
                 return backup_path
-            
+
         except Exception as e:
             print(f"❌ Error creando backup: {e}")
-            return None 
+            return None

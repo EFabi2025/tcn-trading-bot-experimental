@@ -32,18 +32,18 @@ logger = structlog.get_logger(__name__)
 class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
     """
     🧪 Cliente experimental de Binance para investigación
-    
+
     Características experimentales:
     - Dry-run mode configurable (para investigación segura)
     - Soporte para testnet Y producción
     - Logging detallado para análisis
     - Manejo de errores para investigación
     """
-    
+
     def __init__(self, settings: TradingBotSettings, trading_logger: TradingLogger):
         """
         Inicializa el cliente experimental de Binance
-        
+
         Args:
             settings: Configuración del bot
             trading_logger: Logger estructurado para investigación
@@ -52,9 +52,9 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
         self.logger = trading_logger
         self._client: Optional[BinanceRestClient] = None
         self._is_testnet = settings.binance_testnet
-        
+
         self._initialize_client()
-    
+
     def _initialize_client(self) -> None:
         """Inicializa el cliente de Binance (testnet o producción)"""
         try:
@@ -64,10 +64,10 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
                 api_secret=self.settings.binance_secret.get_secret_value(),
                 testnet=self._is_testnet
             )
-            
+
             # Verificar conectividad
             self._verify_connection()
-            
+
             self.logger.log_system_event(
                 "binance_client_initialized",
                 testnet=self._is_testnet,
@@ -75,7 +75,7 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
                 environment=self.settings.environment,
                 experimental_note="Cliente Binance inicializado para investigación"
             )
-            
+
         except Exception as e:
             self.logger.log_error(
                 "binance_client_init_failed",
@@ -84,14 +84,14 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
                 research_note="Verificar credenciales de API"
             )
             raise
-    
+
     def _verify_connection(self) -> None:
         """Verifica conexión experimental con Binance"""
         try:
             # Test básico de conectividad
             server_time = self._client.get_server_time()
             account_status = self._client.get_account_status()
-            
+
             self.logger.log_system_event(
                 "binance_connection_verified",
                 server_time=server_time,
@@ -99,7 +99,7 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
                 testnet=self._is_testnet,
                 research_note="Conexión establecida para investigación"
             )
-            
+
         except BinanceAPIException as e:
             self.logger.log_error(
                 "binance_connection_failed",
@@ -109,11 +109,11 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
                 research_tip="Verificar API keys y permisos"
             )
             raise
-    
+
     async def create_order(self, order_request: OrderRequestSchema) -> OrderSchema:
         """
         🧪 EXPERIMENTAL: Crea una orden (real o simulada según configuración)
-        
+
         En modo dry_run=True: simula la orden
         En modo dry_run=False: ejecuta orden real en Binance
         """
@@ -123,32 +123,32 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
             testnet=self._is_testnet,
             research_note="Procesando orden experimental"
         )
-        
+
         try:
             if self.settings.dry_run:
                 # 🧪 SIMULAR orden para investigación segura
                 simulated_order = await self._simulate_order(order_request)
-                
+
                 self.logger.log_order_completed(
                     simulated_order.dict(),
                     dry_run=True,
                     research_note="Orden simulada para investigación"
                 )
-                
+
                 return simulated_order
             else:
                 # 🚨 EJECUTAR orden REAL en Binance
                 real_order = await self._execute_real_order(order_request)
-                
+
                 self.logger.log_order_completed(
                     real_order.dict(),
                     dry_run=False,
                     testnet=self._is_testnet,
                     research_note="Orden REAL ejecutada en Binance"
                 )
-                
+
                 return real_order
-            
+
         except Exception as e:
             self.logger.log_error(
                 "experimental_order_failed",
@@ -158,11 +158,11 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
                 research_tip="Error en ejecución de orden experimental"
             )
             raise
-    
+
     async def _execute_real_order(self, order_request: OrderRequestSchema) -> OrderSchema:
         """
         🚨 Ejecuta orden REAL en Binance
-        
+
         CUIDADO: Esta función ejecuta trades reales con dinero real
         """
         try:
@@ -173,15 +173,15 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
                 'type': order_request.type.upper(),
                 'quantity': float(order_request.quantity),
             }
-            
+
             # Añadir precio si es orden LIMIT
             if order_request.type.upper() == 'LIMIT':
                 order_params['price'] = float(order_request.price)
                 order_params['timeInForce'] = 'GTC'  # Good Till Cancelled
-            
+
             # 🚨 EJECUTAR ORDEN REAL
             result = self._client.create_order(**order_params)
-            
+
             # Convertir respuesta de Binance a nuestro schema
             order = OrderSchema(
                 id=result['orderId'],
@@ -198,9 +198,9 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
                 commission=Decimal('0'),  # Se obtiene de otro endpoint
                 commission_asset="USDT"
             )
-            
+
             return order
-            
+
         except BinanceAPIException as e:
             self.logger.log_error(
                 "real_order_execution_failed",
@@ -218,23 +218,23 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
                 research_note="Error inesperado en orden real"
             )
             raise
-    
+
     async def _simulate_order(self, order_request: OrderRequestSchema) -> OrderSchema:
         """
         🧪 Simula una orden para investigación segura
-        
+
         Genera datos realistas basados en precio actual de mercado
         """
         # Obtener precio actual para simulación realista
         current_price = await self._get_current_price(order_request.symbol)
-        
+
         # Simular fill price con pequeño slippage
         slippage_factor = Decimal('1.001') if order_request.side == 'BUY' else Decimal('0.999')
         fill_price = current_price * slippage_factor
-        
+
         # ID simulado para investigación
         simulated_order_id = f"SIM_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        
+
         return OrderSchema(
             id=simulated_order_id,
             symbol=order_request.symbol,
@@ -250,7 +250,7 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
             commission=fill_price * order_request.quantity * Decimal('0.001'),  # 0.1% simulado
             commission_asset="USDT"
         )
-    
+
     async def cancel_order(self, symbol: str, order_id: str) -> bool:
         """🧪 Cancela orden (real o simulada según configuración)"""
         self.logger.log_system_event(
@@ -260,7 +260,7 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
             dry_run=self.settings.dry_run,
             research_note="Cancelando orden experimental"
         )
-        
+
         if self.settings.dry_run:
             # En modo simulado, siempre exitoso
             return True
@@ -278,13 +278,13 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
                     order_id=order_id
                 )
                 return False
-    
+
     async def get_order_status(self, symbol: str, order_id: str) -> OrderSchema:
         """🧪 Obtiene status de orden (real o simulada)"""
         if self.settings.dry_run:
             # Para simulación, retornar orden completada
             current_price = await self._get_current_price(symbol)
-            
+
             return OrderSchema(
                 id=order_id,
                 symbol=symbol,
@@ -304,7 +304,7 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
             try:
                 # 🚨 CONSULTAR orden REAL en Binance
                 result = self._client.get_order(symbol=symbol, orderId=order_id)
-                
+
                 return OrderSchema(
                     id=result['orderId'],
                     symbol=result['symbol'],
@@ -329,17 +329,17 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
                     order_id=order_id
                 )
                 raise
-    
+
     async def get_balances(self) -> List[BalanceSchema]:
         """🧪 Obtiene balances reales de Binance"""
         try:
             account_info = self._client.get_account()
             balances = []
-            
+
             for balance in account_info['balances']:
                 free_balance = Decimal(balance['free'])
                 locked_balance = Decimal(balance['locked'])
-                
+
                 # Solo incluir balances con valor
                 if free_balance > 0 or locked_balance > 0:
                     balances.append(BalanceSchema(
@@ -348,15 +348,15 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
                         locked=locked_balance,
                         total=free_balance + locked_balance
                     ))
-            
+
             self.logger.log_balance_check(
                 [b.dict() for b in balances],
                 testnet=self._is_testnet,
                 research_note="Balances obtenidos para investigación"
             )
-            
+
             return balances
-            
+
         except BinanceAPIException as e:
             self.logger.log_error(
                 "experimental_balance_fetch_failed",
@@ -366,16 +366,16 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
                 research_tip="Verificar permisos de API"
             )
             raise
-    
+
     async def get_market_data(self, symbol: str) -> MarketDataSchema:
         """🧪 Obtiene datos de mercado en tiempo real"""
         try:
             # Obtener ticker 24h
             ticker = self._client.get_ticker(symbol=symbol)
-            
+
             # Obtener orderbook
             orderbook = self._client.get_order_book(symbol=symbol, limit=5)
-            
+
             market_data = MarketDataSchema(
                 symbol=symbol,
                 price=Decimal(ticker['lastPrice']),
@@ -390,15 +390,15 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
                 bid_volume=Decimal(orderbook['bids'][0][1]),
                 ask_volume=Decimal(orderbook['asks'][0][1])
             )
-            
+
             self.logger.log_market_data(
                 market_data.dict(),
                 testnet=self._is_testnet,
                 research_note="Datos de mercado para investigación"
             )
-            
+
             return market_data
-            
+
         except BinanceAPIException as e:
             self.logger.log_error(
                 "experimental_market_data_failed",
@@ -409,7 +409,7 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
                 research_tip="Verificar símbolo válido"
             )
             raise
-    
+
     async def _get_current_price(self, symbol: str) -> Decimal:
         """Helper para obtener precio actual"""
         try:
@@ -418,12 +418,12 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
         except Exception:
             # Fallback para investigación
             return Decimal('50000.0')  # Precio BTC ejemplo
-    
+
     async def get_symbol_info(self, symbol: str) -> Dict[str, Any]:
         """🧪 Obtiene información del símbolo"""
         try:
             exchange_info = self._client.get_exchange_info()
-            
+
             for symbol_info in exchange_info['symbols']:
                 if symbol_info['symbol'] == symbol:
                     return {
@@ -439,9 +439,9 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
                         'tickSize': symbol_info['filters'][0]['tickSize'],
                         'research_note': "Info obtenida para investigación"
                     }
-            
+
             raise ValueError(f"🧪 Símbolo {symbol} no encontrado")
-            
+
         except BinanceAPIException as e:
             self.logger.log_error(
                 "experimental_symbol_info_failed",
@@ -450,7 +450,7 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
                 research_tip="Verificar símbolo disponible"
             )
             raise
-    
+
     def is_connected(self) -> bool:
         """🧪 Verifica conexión"""
         try:
@@ -460,7 +460,7 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
             return False
         except Exception:
             return False
-    
+
     async def close(self) -> None:
         """🧪 Cierra conexión"""
         self.logger.log_system_event(
@@ -468,4 +468,4 @@ class ExperimentalBinanceClient(ITradingClient, IMarketDataProvider):
             research_note="Cliente experimental desconectado"
         )
         # No hay conexión persistente que cerrar en REST API
-        pass 
+        pass

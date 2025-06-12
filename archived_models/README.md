@@ -7,7 +7,7 @@ Esta carpeta contiene modelos TCN que **NO están en uso actualmente** en el sis
 Los modelos que SÍ se están usando están en `/models/`:
 
 - ✅ `models/tcn_final_btcusdt.h5` - Modelo TCN para BTC/USDT
-- ✅ `models/tcn_final_ethusdt.h5` - Modelo TCN para ETH/USDT  
+- ✅ `models/tcn_final_ethusdt.h5` - Modelo TCN para ETH/USDT
 - ✅ `models/tcn_final_bnbusdt.h5` - Modelo TCN para BNB/USDT
 
 **Input Shape:** `(50, 21)` - 50 timesteps, 21 features técnicas
@@ -43,4 +43,4 @@ Si necesitas usar un modelo archivado:
 
 ---
 **Generado:** $(date)
-**Sistema:** Professional Trading Bot con TCN 
+**Sistema:** Professional Trading Bot con TCN
