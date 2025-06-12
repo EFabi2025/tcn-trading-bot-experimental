@@ -1,166 +1,118 @@
 #!/usr/bin/env python3
 """
-🧪 TEST BINANCE CONNECTION
-Script para probar la conectividad y obtención de datos de Binance
+🧪 Tester para Simple Professional Trading Manager
 """
-
 import asyncio
 import os
+from datetime import datetime
 from dotenv import load_dotenv
 from simple_professional_manager import SimpleProfessionalTradingManager
 
 load_dotenv()
 
-async def test_binance_connection():
-    """🧪 Probar conexión completa con Binance"""
-    print("🧪 TESTING BINANCE CONNECTION")
-    print("=" * 50)
-
-    try:
-        # Verificar variables de entorno
-        api_key = os.getenv('BINANCE_API_KEY')
-        secret_key = os.getenv('BINANCE_SECRET_KEY')
-        base_url = os.getenv('BINANCE_BASE_URL', 'https://testnet.binance.vision')
-
-        if not api_key or not secret_key:
-            print("❌ Error: Faltan BINANCE_API_KEY o BINANCE_SECRET_KEY en .env")
-            return False
-
-        print(f"✅ API Key configurada: {api_key[:8]}...")
-        print(f"✅ Secret Key configurada: {secret_key[:8]}...")
-        print(f"✅ Base URL: {base_url}")
-        print()
-
-        # Crear manager
-        manager = SimpleProfessionalTradingManager()
-
-        # Test 1: Obtener precios públicos
-        print("🔍 Test 1: Obteniendo precios públicos...")
-        btc_price = await manager.get_current_price('BTCUSDT')
-        eth_price = await manager.get_current_price('ETHUSDT')
-        bnb_price = await manager.get_current_price('BNBUSDT')
-
-        if btc_price > 0 and eth_price > 0 and bnb_price > 0:
-            print(f"   ✅ BTCUSDT: ${btc_price:.2f}")
-            print(f"   ✅ ETHUSDT: ${eth_price:.2f}")
-            print(f"   ✅ BNBUSDT: ${bnb_price:.2f}")
-        else:
-            print("   ❌ Error obteniendo precios públicos")
-            return False
-        print()
-
-        # Test 2: Obtener información de cuenta (requiere autenticación)
-        print("🔍 Test 2: Obteniendo información de cuenta...")
-        account_info = await manager.get_account_info()
-
-        if account_info:
-            print(f"   ✅ Balance USDT: ${account_info.usdt_balance:.2f}")
-            print(f"   ✅ Balance total USD: ${account_info.total_balance_usd:.2f}")
-            print(f"   ✅ Activos encontrados: {len(account_info.balances)}")
-
-            # Mostrar balances no-cero
-            non_zero_balances = {k: v for k, v in account_info.balances.items() if v['total'] > 0}
-            if non_zero_balances:
-                print("   💰 Balances actuales:")
-                for asset, balance in non_zero_balances.items():
-                    print(f"      {asset}: {balance['total']:.8f} (libre: {balance['free']:.8f}, bloqueado: {balance['locked']:.8f})")
-            else:
-                print("   ⚠️ No se encontraron balances activos")
-
-        else:
-            print("   ❌ Error obteniendo información de cuenta")
-            return False
-        print()
-
-        # Test 3: Verificar actualización de balance
-        print("🔍 Test 3: Actualizando balance...")
-        old_balance = manager.current_balance
-        success = await manager.update_balance_from_binance()
-
-        if success:
-            print(f"   ✅ Balance actualizado: ${old_balance:.2f} → ${manager.current_balance:.2f}")
-            print(f"   ✅ Información de cuenta cacheada: {'Sí' if manager.account_info else 'No'}")
-        else:
-            print("   ❌ Error actualizando balance")
-            return False
-        print()
-
-        # Test 4: Verificar métricas
-        print("🔍 Test 4: Verificando métricas...")
-        print(f"   📊 API calls realizadas: {manager.metrics.get('api_calls_count', 0)}")
-        print(f"   📈 Balance updates: {manager.metrics.get('balance_updates', 0)}")
-        print(f"   ❌ Errores: {manager.metrics.get('error_count', 0)}")
-        if manager.metrics.get('last_error'):
-            print(f"   🚨 Último error: {manager.metrics.get('last_error')}")
-        print()
-
-        print("✅ TODOS LOS TESTS PASARON")
-        print("🎯 El trading manager debería funcionar correctamente")
-        return True
-
-    except Exception as e:
-        print(f"❌ Error durante los tests: {e}")
-        return False
-
-async def test_continuous_updates():
-    """🔄 Probar actualizaciones continuas"""
-    print("\n🔄 TEST ACTUALIZACIONES CONTINUAS")
-    print("=" * 50)
-    print("⚠️ Este test correrá por 3 minutos actualizando datos...")
-    print("⏸️ Presiona Ctrl+C para detener\n")
+async def test_trading_manager():
+    """🎯 Test básico del Trading Manager"""
+    print("🧪 Iniciando test del Simple Professional Trading Manager...")
 
     manager = SimpleProfessionalTradingManager()
 
     try:
-        for i in range(18):  # 3 minutos (18 x 10 segundos)
-            print(f"🔄 Actualización {i+1}/18...")
+        # Inicializar
+        await manager.initialize()
+        print("✅ Manager inicializado correctamente")
 
-            # Obtener precios
-            prices = await manager._get_current_prices()
+        # Test de obtención de precios
+        prices = await manager._get_current_prices()
+        print(f"✅ Precios obtenidos: {prices}")
 
-            # Actualizar balance cada 5 actualizaciones
-            if i % 5 == 0:
-                await manager.update_balance_from_binance()
+        # Test de generación de señales TCN
+        print("\n🧠 Probando generación de señales TCN...")
+        signals = await manager._generate_tcn_signals(prices)
 
-            # Mostrar resumen
-            print(f"   💰 Balance: ${manager.current_balance:.2f}")
-            print(f"   📊 API calls: {manager.metrics.get('api_calls_count', 0)}")
-            print(f"   ❌ Errores: {manager.metrics.get('error_count', 0)}")
-            print()
+        if signals:
+            print(f"🎯 Señales generadas: {len(signals)}")
+            for symbol, signal_data in signals.items():
+                print(f"  📊 {symbol}: {signal_data['signal']} ({signal_data['confidence']:.1%})")
+        else:
+            print("📊 No se generaron señales en este ciclo")
 
-            await asyncio.sleep(10)
+        # Test de métricas
+        await manager._update_metrics()
+        status = await manager.get_system_status()
+        print(f"\n📈 Estado del sistema: {status['status']}")
+        print(f"💰 Balance: ${status['current_balance_usdt']:.2f}")
+        print(f"📊 Posiciones activas: {status['active_positions']}")
+        print(f"🎯 Trades realizados: {status['trade_count']}")
 
-        print("✅ Test de actualizaciones continuas completado")
+        print("\n✅ Test completado exitosamente")
+
+    except Exception as e:
+        print(f"❌ Error durante el test: {e}")
+        raise
+    finally:
+        await manager.shutdown()
+        print("🔄 Manager cerrado correctamente")
+
+async def test_continuous_run(duration_minutes: int = 5):
+    """🔄 Test de ejecución continua"""
+    print(f"🔄 Iniciando test continuo por {duration_minutes} minutos...")
+
+    manager = SimpleProfessionalTradingManager()
+
+    try:
+        await manager.initialize()
+
+        # Ejecutar por tiempo limitado
+        start_time = datetime.now()
+
+        while True:
+            current_time = datetime.now()
+            elapsed = (current_time - start_time).total_seconds() / 60
+
+            if elapsed >= duration_minutes:
+                print(f"⏰ Tiempo completado: {duration_minutes} minutos")
+                break
+
+            # Una iteración del loop principal
+            await manager._display_professional_info()
+            await asyncio.sleep(30)  # Esperar 30 segundos entre iteraciones
 
     except KeyboardInterrupt:
-        print("\n⏹️ Test interrumpido por el usuario")
+        print("\n⏹️ Test detenido por el usuario")
     except Exception as e:
         print(f"\n❌ Error durante test continuo: {e}")
 
 async def main():
     """🎯 Función principal"""
-    print("🧪 BINANCE CONNECTION TESTER")
-    print("Verificando conectividad y funcionalidad básica...")
-    print()
+    print("🎯 Simple Professional Trading Manager - Tester")
+    print("=" * 50)
 
-    # Test básico
-    success = await test_binance_connection()
+    choice = input("""
+Selecciona el tipo de test:
+1. Test básico (inicialización y señales)
+2. Test continuo (5 minutos)
+3. Solo test de conexión Binance
 
-    if success:
-        # Preguntar si hacer test continuo
-        try:
-            response = input("\n¿Ejecutar test de actualizaciones continuas? (y/N): ").lower()
-            if response in ['y', 'yes', 'sí', 'si']:
-                await test_continuous_updates()
-        except KeyboardInterrupt:
-            print("\n👋 Tests terminados")
+Opción (1-3): """).strip()
+
+    if choice == "1":
+        await test_trading_manager()
+    elif choice == "2":
+        await test_continuous_run(5)
+    elif choice == "3":
+        from enhanced_real_predictor import AdvancedBinanceData
+        async with AdvancedBinanceData() as binance_data:
+            market_data = await binance_data.get_comprehensive_data('BTCUSDT')
+            if market_data and market_data.get('klines_1m'):
+                print(f'✅ Datos obtenidos: {len(market_data["klines_1m"])} velas')
+                print(f'✅ Último precio BTC: ${market_data["klines_1m"][-1]["close"]}')
+            else:
+                print('❌ No se pudieron obtener datos')
     else:
-        print("\n❌ Los tests básicos fallaron. Revisa tu configuración.")
+        print("❌ Opción inválida")
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\n👋 Tester detenido por el usuario")
-    except Exception as e:
-        print(f"\n❌ Error fatal en tester: {e}")

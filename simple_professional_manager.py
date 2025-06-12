@@ -655,75 +655,83 @@ class SimpleProfessionalTradingManager:
         # Inicializar predictor TCN si no existe
         if not hasattr(self, 'tcn_predictor'):
             try:
-                from enhanced_real_predictor import EnhancedTCNPredictor, AdvancedBinanceData
+                from enhanced_real_predictor import EnhancedTCNPredictor
                 self.tcn_predictor = EnhancedTCNPredictor()
-                self.binance_data_provider = AdvancedBinanceData()
                 print("🧠 Predictor TCN inicializado correctamente")
             except Exception as e:
                 print(f"❌ Error inicializando predictor TCN: {e}")
                 return signals
 
-        # Generar señales para cada símbolo usando TCN
-        for symbol, current_price in prices.items():
-            try:
-                print(f"🔍 Analizando {symbol} con modelo TCN...")
+        # Usar AdvancedBinanceData como context manager para obtener datos
+        try:
+            from enhanced_real_predictor import AdvancedBinanceData
 
-                # Obtener datos de mercado completos
-                market_data = await self.binance_data_provider.get_comprehensive_data(symbol)
+            async with AdvancedBinanceData() as binance_data:
+                # Generar señales para cada símbolo usando TCN
+                for symbol, current_price in prices.items():
+                    try:
+                        print(f"🔍 Analizando {symbol} con modelo TCN...")
 
-                if not market_data or not market_data.get('klines_1m'):
-                    print(f"  ❌ Sin datos suficientes para {symbol}")
-                    continue
+                        # Obtener datos de mercado completos
+                        market_data = await binance_data.get_comprehensive_data(symbol)
 
-                # Generar predicción TCN
-                prediction = await self.tcn_predictor.predict_enhanced(symbol, market_data)
+                        if not market_data or not market_data.get('klines_1m'):
+                            print(f"  ❌ Sin datos suficientes para {symbol}")
+                            continue
 
-                if not prediction:
-                    print(f"  ❌ No se pudo generar predicción para {symbol}")
-                    continue
+                        # Generar predicción TCN
+                        prediction = await self.tcn_predictor.predict_enhanced(symbol, market_data)
 
-                signal = prediction['signal']
-                confidence = prediction['confidence']
+                        if not prediction:
+                            print(f"  ❌ No se pudo generar predicción para {symbol}")
+                            continue
 
-                print(f"  🎯 TCN Señal: {signal} | Confianza: {confidence:.1%}")
-                print(f"  📊 Probabilidades: BUY:{prediction['probabilities']['BUY']:.3f} | HOLD:{prediction['probabilities']['HOLD']:.3f} | SELL:{prediction['probabilities']['SELL']:.3f}")
+                        signal = prediction['signal']
+                        confidence = prediction['confidence']
 
-                # ✅ FILTROS CRÍTICOS PARA BINANCE SPOT
+                        print(f"  🎯 TCN Señal: {signal} | Confianza: {confidence:.1%}")
+                        print(f"  📊 Probabilidades: BUY:{prediction['probabilities']['BUY']:.3f} | HOLD:{prediction['probabilities']['HOLD']:.3f} | SELL:{prediction['probabilities']['SELL']:.3f}")
 
-                # 1. Solo procesar señales BUY (Spot trading no permite SELL sin activos)
-                if signal != 'BUY':
-                    print(f"  ⏸️ Señal {signal} ignorada - Solo BUY permitido en Spot")
-                    continue
+                        # ✅ FILTROS CRÍTICOS PARA BINANCE SPOT
 
-                # 2. Verificar confianza mínima (70%)
-                if confidence < 0.70:
-                    print(f"  ❌ Confianza insuficiente: {confidence:.1%} < 70%")
-                    continue
+                        # 1. Solo procesar señales BUY (Spot trading no permite SELL sin activos)
+                        if signal != 'BUY':
+                            print(f"  ⏸️ Señal {signal} ignorada - Solo BUY permitido en Spot")
+                            continue
 
-                # 3. Verificar que no tengamos posición activa en este símbolo
-                if symbol in self.active_positions:
-                    print(f"  ⚠️ Ya existe posición activa en {symbol}")
-                    continue
+                        # 2. Verificar confianza mínima (70%)
+                        if confidence < 0.70:
+                            print(f"  ❌ Confianza insuficiente: {confidence:.1%} < 70%")
+                            continue
 
-                # ✅ SEÑAL VÁLIDA - Agregar a signals
-                signals[symbol] = {
-                    'signal': signal,
-                    'confidence': confidence,
-                    'current_price': current_price,
-                    'timestamp': datetime.now(),
-                    'reason': 'TCN_MODEL_PREDICTION',
-                    'available_usdt': self.current_balance,
-                    'raw_confidence': prediction['raw_confidence'],
-                    'technical_boost': prediction['technical_boost'],
-                    'probabilities': prediction['probabilities'],
-                    'features_used': prediction['features_used']
-                }
+                        # 3. Verificar que no tengamos posición activa en este símbolo
+                        if symbol in self.active_positions:
+                            print(f"  ⚠️ Ya existe posición activa en {symbol}")
+                            continue
 
-                print(f"  ✅ SEÑAL VÁLIDA: {symbol} {signal} ({confidence:.1%})")
+                        # ✅ SEÑAL VÁLIDA - Agregar a signals
+                        signals[symbol] = {
+                            'signal': signal,
+                            'confidence': confidence,
+                            'current_price': current_price,
+                            'timestamp': datetime.now(),
+                            'reason': 'TCN_MODEL_PREDICTION',
+                            'available_usdt': self.current_balance,
+                            'raw_confidence': prediction['raw_confidence'],
+                            'technical_boost': prediction['technical_boost'],
+                            'probabilities': prediction['probabilities'],
+                            'features_used': prediction['features_used']
+                        }
 
-            except Exception as e:
-                print(f"  ❌ Error procesando {symbol}: {e}")
-                continue
+                        print(f"  ✅ SEÑAL VÁLIDA: {symbol} {signal} ({confidence:.1%})")
+
+                    except Exception as e:
+                        print(f"  ❌ Error procesando {symbol}: {e}")
+                        continue
+
+        except Exception as e:
+            print(f"❌ Error con proveedor de datos Binance: {e}")
+            return signals
 
         if signals:
             print(f"🎯 Total señales TCN generadas: {len(signals)}")
