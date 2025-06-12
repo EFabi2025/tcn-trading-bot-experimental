@@ -83,6 +83,16 @@ class TradingConfig:
         'CONCENTRATION_WARNING_THRESHOLD': 35.0,   # Advertir al 35%
     }
 
+    # 🧠 Configuración TensorFlow (Compatible Windows/macOS)
+    TENSORFLOW_CONFIG = {
+        'use_metal': False,  # Apple Silicon optimization (solo macOS)
+        'use_gpu': False,    # GPU NVIDIA (cambiar a True si tienes GPU)
+        'memory_growth': True,
+        'log_device_placement': False,
+        'inter_op_parallelism_threads': 0,  # Auto-detect
+        'intra_op_parallelism_threads': 0   # Auto-detect
+    }
+
 class ConfigManager:
     """📋 Gestor de configuración centralizada"""
 
