@@ -1,0 +1,27 @@
+{
+    "trading": {
+        "pairs": [
+            "BTCUSDT",
+            "ETHUSDT",
+            "BNBUSDT"
+        ],
+        "testnet": true,
+        "prediction_interval": 60,
+        "min_confidence": 0.8,
+        "max_position_size": 0.05,
+        "max_daily_trades": 10
+    },
+    "risk_management": {
+        "stop_loss_pct": 0.02,
+        "take_profit_pct": 0.04,
+        "min_trade_value": 10.0
+    },
+    "model": {
+        "sequence_length": 50,
+        "retrain_interval_hours": 24
+    },
+    "alerts": {
+        "enable_logging": true,
+        "log_level": "INFO"
+    }
+}

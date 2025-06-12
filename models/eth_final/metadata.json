@@ -1,0 +1,27 @@
+{
+  "pair": "ETHUSDT",
+  "model_type": "ETH Final TCN with Class Weights",
+  "features": 8,
+  "lookback_window": 15,
+  "volatility_threshold": 0.003,
+  "bias_score": 10.0,
+  "avg_confidence": 0.48324713110923767,
+  "uses_class_weights": true,
+  "final_distribution": {
+    "SELL": 0.0,
+    "HOLD": 1.0,
+    "BUY": 0.0
+  },
+  "training_date": "2025-06-10T12:41:08.233962",
+  "features_list": [
+    "returns",
+    "sma_ratio",
+    "ema_ratio",
+    "rsi_norm",
+    "macd_norm",
+    "volatility",
+    "volume_momentum",
+    "price_momentum"
+  ],
+  "model_params": 3491
+}

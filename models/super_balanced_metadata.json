@@ -1,0 +1,21 @@
+{
+  "model_type": "Super Balanced TCN",
+  "features": 66,
+  "training_samples": 287,
+  "validation_samples": 72,
+  "bias_score": 10.0,
+  "final_distribution": {
+    "SELL": 1.0,
+    "HOLD": 0.0,
+    "BUY": 0.0
+  },
+  "techniques_applied": [
+    "Multi-timeframe data",
+    "Professional regime detection",
+    "Noise injection augmentation",
+    "Super balanced labels",
+    "Optimized TCN architecture",
+    "Sharpe Ratio loss function",
+    "Forced absolute balance"
+  ]
+}

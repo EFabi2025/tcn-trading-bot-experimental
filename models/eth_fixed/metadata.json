@@ -1,0 +1,28 @@
+{
+  "pair": "ETHUSDT",
+  "model_type": "ETH Fixed TCN",
+  "features": 10,
+  "lookback_window": 20,
+  "volatility_threshold": 0.002,
+  "bias_score": 10.0,
+  "avg_confidence": 0.43290460109710693,
+  "final_distribution": {
+    "SELL": 0.0,
+    "HOLD": 1.0,
+    "BUY": 0.0
+  },
+  "training_date": "2025-06-10T12:39:36.186193",
+  "features_list": [
+    "returns",
+    "sma_5",
+    "sma_20",
+    "ema_5",
+    "ema_12",
+    "rsi",
+    "macd",
+    "volatility",
+    "volume_ratio",
+    "price_position"
+  ],
+  "model_params": 17667
+}

@@ -1,0 +1,12 @@
+{
+  "pair": "ETHUSDT",
+  "model_type": "ETH Optimized TCN",
+  "volatility_threshold": 0.002,
+  "bias_score": 10.0,
+  "final_distribution": {
+    "SELL": 0.0,
+    "HOLD": 1.0,
+    "BUY": 0.0
+  },
+  "training_date": "2025-06-10T12:34:50.201599"
+}
