@@ -1,0 +1,58 @@
+# 🔐 CONFIGURACIÓN DE BINANCE API - PLANTILLA
+# ⚠️  COPIA ESTE ARCHIVO COMO .env Y REEMPLAZA CON TUS CREDENCIALES REALES
+
+# ================================
+# 🚨 API KEYS DE BINANCE (OBLIGATORIO)
+# ================================
+BINANCE_API_KEY=tu_api_key_de_binance_aqui
+BINANCE_SECRET_KEY=tu_secret_key_de_binance_aqui
+
+# ================================
+# 🌍 CONFIGURACIÓN DEL ENTORNO
+# ================================
+# testnet = Simulación (sin dinero real)
+# production = Trading real (¡DINERO REAL!)
+ENVIRONMENT=testnet
+
+# ================================
+# 🔗 URLs DE API
+# ================================
+BINANCE_TESTNET_URL=https://testnet.binance.vision
+BINANCE_PRODUCTION_URL=https://api.binance.com
+
+# ================================
+# 💬 DISCORD WEBHOOK
+# ================================
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/tu_webhook_id_aqui
+
+# ================================
+# 📊 CONFIGURACIÓN DE TRADING
+# ================================
+# Máximo % del balance por operación (recomendado: 5-10%)
+MAX_POSITION_SIZE_PERCENT=5
+
+# Máximo % de pérdida diaria permitida
+MAX_DAILY_LOSS_PERCENT=3
+
+# Confianza mínima para ejecutar trades (0.65 = 65%)
+MIN_CONFIDENCE_THRESHOLD=0.70
+
+# Modo de trading: dry_run (simulación) | real (dinero real)
+TRADE_MODE=dry_run
+
+# ================================
+# 🔔 NOTIFICACIONES
+# ================================
+ENABLE_DISCORD_NOTIFICATIONS=true
+NOTIFICATION_COOLDOWN_MINUTES=3
+
+# ================================
+# 🗄️ BASE DE DATOS
+# ================================
+DATABASE_URL=sqlite:///database/trading_bot.db
+
+# ================================
+# 📝 LOGGING
+# ================================
+LOG_LEVEL=INFO
+LOG_FILE=logs/trading_bot.log 

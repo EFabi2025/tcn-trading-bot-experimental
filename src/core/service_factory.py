@@ -1,362 +1,333 @@
 """
-🧪 EDUCATIONAL Service Factory - Trading Bot Experimental
+🧪 EXPERIMENTAL Service Factory - Trading Bot Research
 
-Este módulo implementa el patrón Factory educacional que:
-- Crea e inyecta todas las dependencias SOLID
-- Configura servicios en modo educacional
-- Demuestra Dependency Injection patterns
-- Facilita testing con mocks
+Este módulo implementa el patrón Factory para crear servicios experimentales:
+- Dependency injection para servicios intercambiables
+- Configuración centralizada para investigación
+- Validaciones de seguridad configurables
+- Soporte para modo dry-run Y trading real
 
-⚠️ EXPERIMENTAL: Solo para fines educacionales
+⚠️ EXPERIMENTAL: Para investigación en trading algorítmico
 """
 
-from typing import Optional, Dict, Any
-import structlog
+from typing import Dict, Any, Optional
 
+import structlog
+from ..services.binance_client import ExperimentalBinanceClient
+from ..services.ml_predictor import ExperimentalMLPredictor
+from ..services.trading_orchestrator import ExperimentalTradingOrchestrator
+from ..interfaces.trading_interfaces import ITradingClient, IMLPredictor, ITradingOrchestrator
 from ..core.config import TradingBotSettings
 from ..core.logging_config import TradingLogger
-
-# Interfaces
-from ..interfaces.trading_interfaces import (
-    ITradingClient, IMLPredictor, IRiskManager, 
-    IMarketDataProvider, INotificationService
-)
-
-# Implementaciones educacionales
-from ..services.binance_client import EducationalBinanceClient
-from ..services.ml_predictor import EducationalMLPredictor
-from ..services.risk_manager import EducationalRiskManager
-from ..services.trading_orchestrator import EducationalTradingOrchestrator
 
 logger = structlog.get_logger(__name__)
 
 
-class EducationalServiceFactory:
+class ExperimentalServiceFactory:
     """
-    🎓 Factory educacional para servicios del trading bot
-    
-    Características educacionales:
-    - Implementa Dependency Injection pattern
-    - Crea servicios en modo seguro (dry-run)
-    - Facilita testing con interfaces
-    - Demuestra arquitectura SOLID limpia
+    🧪 Factory experimental para servicios de trading research
+
+    Implementa:
+    - SOLID Dependency Injection
+    - Configuración flexible para investigación
+    - Validaciones de seguridad configurables
+    - Modo dry-run Y trading real
     """
-    
-    def __init__(self, settings: TradingBotSettings):
+
+    def __init__(self, settings: TradingBotSettings, trading_logger: TradingLogger):
         """
-        Inicializa la factory educacional
-        
+        Inicializa el factory experimental
+
         Args:
-            settings: Configuración del bot (debe ser modo educacional)
+            settings: Configuración del sistema (soporta dry_run y production)
+            trading_logger: Logger estructurado para investigación
         """
         self.settings = settings
-        self.trading_logger = TradingLogger()
-        
-        # Validación educacional de seguridad
-        self._validate_educational_settings()
-        
-        # Cache de servicios (singleton pattern)
-        self._services_cache: Dict[str, Any] = {}
-        
-        logger.info(
-            "🎓 Factory educacional inicializada",
+        self.logger = trading_logger
+        self._services: Dict[str, Any] = {}
+
+        # Log configuración experimental
+        self.logger.log_system_event(
+            "experimental_factory_initialized",
             dry_run=settings.dry_run,
             testnet=settings.binance_testnet,
-            educational_note="Factory lista para crear servicios experimentales"
+            environment=settings.environment,
+            research_note="Factory configurado para investigación"
         )
-    
-    def _validate_educational_settings(self) -> None:
-        """Valida que la configuración sea segura para educación"""
-        if not self.settings.dry_run:
-            raise ValueError(
-                "🚨 EDUCATIONAL: Factory requiere dry_run=True para seguridad"
-            )
-        
-        if not self.settings.binance_testnet:
-            raise ValueError(
-                "🚨 EDUCATIONAL: Factory requiere testnet=True para educación"
-            )
-        
-        if self.settings.environment == "production":
-            raise ValueError(
-                "🚨 EDUCATIONAL: Factory no puede usar environment=production"
-            )
-    
+
     def create_trading_client(self) -> ITradingClient:
         """
-        🎓 Crea cliente de trading educacional
-        
-        Returns:
-            Cliente que implementa ITradingClient con Binance testnet
+        🧪 Crea cliente experimental de Binance
+
+        Configuración según settings:
+        - dry_run=True: Solo simulación
+        - dry_run=False + testnet=True: Trading real en testnet
+        - dry_run=False + testnet=False: Trading real en producción
         """
-        if "trading_client" not in self._services_cache:
-            self._services_cache["trading_client"] = EducationalBinanceClient(
-                settings=self.settings,
-                trading_logger=self.trading_logger
+        if 'trading_client' not in self._services:
+            self.logger.log_system_event(
+                "creating_experimental_trading_client",
+                dry_run=self.settings.dry_run,
+                testnet=self.settings.binance_testnet,
+                research_note="Creando cliente experimental Binance"
             )
-            
-            logger.info(
-                "🎓 Cliente de trading educacional creado",
-                educational_note="Cliente Binance en modo testnet/dry-run"
-            )
-        
-        return self._services_cache["trading_client"]
-    
-    def create_market_data_provider(self) -> IMarketDataProvider:
-        """
-        🎓 Crea proveedor de datos de mercado educacional
-        
-        Returns:
-            Proveedor que implementa IMarketDataProvider
-        """
-        # En este caso, reutilizamos el mismo cliente de Binance
-        # que también implementa IMarketDataProvider
-        return self.create_trading_client()
-    
+
+            try:
+                # 🧪 EXPERIMENTAL: Cliente configurable
+                client = ExperimentalBinanceClient(
+                    settings=self.settings,
+                    trading_logger=self.logger
+                )
+
+                self._services['trading_client'] = client
+
+                self.logger.log_system_event(
+                    "experimental_trading_client_created",
+                    dry_run=self.settings.dry_run,
+                    testnet=self.settings.binance_testnet,
+                    research_note="Cliente experimental listo para investigación"
+                )
+
+            except Exception as e:
+                self.logger.log_error(
+                    "experimental_trading_client_creation_failed",
+                    error=str(e),
+                    research_tip="Verificar configuración de API keys"
+                )
+                raise
+
+        return self._services['trading_client']
+
     def create_ml_predictor(self) -> IMLPredictor:
         """
-        🎓 Crea predictor ML educacional
-        
-        Returns:
-            Predictor que implementa IMLPredictor con modelo TCN
+        🧪 Crea predictor ML experimental
+
+        Carga modelo TCN para investigación algorítmica
         """
-        if "ml_predictor" not in self._services_cache:
-            self._services_cache["ml_predictor"] = EducationalMLPredictor(
-                settings=self.settings,
-                trading_logger=self.trading_logger
+        if 'ml_predictor' not in self._services:
+            self.logger.log_system_event(
+                "creating_experimental_ml_predictor",
+                research_note="Creando predictor ML para investigación"
             )
-            
-            logger.info(
-                "🎓 Predictor ML educacional creado",
-                educational_note="Predictor TCN para experimentación"
+
+            try:
+                # 🧪 EXPERIMENTAL: Predictor ML configurable
+                predictor = ExperimentalMLPredictor(
+                    settings=self.settings,
+                    trading_logger=self.logger
+                )
+
+                self._services['ml_predictor'] = predictor
+
+                self.logger.log_system_event(
+                    "experimental_ml_predictor_created",
+                    research_note="Predictor ML experimental listo"
+                )
+
+            except Exception as e:
+                self.logger.log_error(
+                    "experimental_ml_predictor_creation_failed",
+                    error=str(e),
+                    research_tip="Verificar modelo TCN disponible"
+                )
+                raise
+
+        return self._services['ml_predictor']
+
+    def create_trading_orchestrator(self) -> ITradingOrchestrator:
+        """
+        🧪 Crea orquestador experimental de trading
+
+        Configura el motor de trading principal para investigación
+        """
+        if 'trading_orchestrator' not in self._services:
+            self.logger.log_system_event(
+                "creating_experimental_trading_orchestrator",
+                dry_run=self.settings.dry_run,
+                research_note="Creando orquestador experimental"
             )
-        
-        return self._services_cache["ml_predictor"]
-    
-    def create_risk_manager(self) -> IRiskManager:
-        """
-        🎓 Crea gestor de riesgos educacional
-        
-        Returns:
-            Gestor que implementa IRiskManager con validaciones
-        """
-        if "risk_manager" not in self._services_cache:
-            self._services_cache["risk_manager"] = EducationalRiskManager(
-                settings=self.settings,
-                trading_logger=self.trading_logger
-            )
-            
-            logger.info(
-                "🎓 Gestor de riesgos educacional creado",
-                educational_note="Risk manager con validaciones experimentales"
-            )
-        
-        return self._services_cache["risk_manager"]
-    
-    def create_notification_service(self) -> Optional[INotificationService]:
-        """
-        🎓 Crea servicio de notificaciones educacional (opcional)
-        
-        Returns:
-            Servicio que implementa INotificationService o None
-        """
-        # Por ahora, retornar None - se puede implementar después
-        # como servicio de logging o email educacional
-        logger.info(
-            "🎓 Servicio de notificaciones no implementado",
-            educational_note="Se puede agregar Discord/Slack/Email educacional"
-        )
-        return None
-    
-    def create_trading_orchestrator(self) -> EducationalTradingOrchestrator:
-        """
-        🎓 Crea orquestador principal educacional
-        
-        Returns:
-            Orquestador completamente configurado con todas las dependencias
-        """
-        if "orchestrator" not in self._services_cache:
-            # Crear todas las dependencias
-            trading_client = self.create_trading_client()
-            market_data_provider = self.create_market_data_provider()
-            ml_predictor = self.create_ml_predictor()
-            risk_manager = self.create_risk_manager()
-            notification_service = self.create_notification_service()
-            
-            # Crear orquestador con inyección de dependencias
-            self._services_cache["orchestrator"] = EducationalTradingOrchestrator(
-                settings=self.settings,
-                trading_logger=self.trading_logger,
-                trading_client=trading_client,
-                market_data_provider=market_data_provider,
-                ml_predictor=ml_predictor,
-                risk_manager=risk_manager,
-                notification_service=notification_service,
-                trading_strategy=None  # Se puede agregar después
-            )
-            
-            logger.info(
-                "🎓 Orquestador educacional creado",
-                educational_note="Orquestador con todas las dependencias inyectadas"
-            )
-        
-        return self._services_cache["orchestrator"]
-    
+
+            try:
+                # Inyectar dependencias experimentales
+                trading_client = self.create_trading_client()
+                ml_predictor = self.create_ml_predictor()
+
+                # 🧪 EXPERIMENTAL: Orquestador configurable
+                orchestrator = ExperimentalTradingOrchestrator(
+                    trading_client=trading_client,
+                    ml_predictor=ml_predictor,
+                    settings=self.settings,
+                    trading_logger=self.logger
+                )
+
+                self._services['trading_orchestrator'] = orchestrator
+
+                self.logger.log_system_event(
+                    "experimental_trading_orchestrator_created",
+                    dry_run=self.settings.dry_run,
+                    research_note="Orquestador experimental configurado"
+                )
+
+            except Exception as e:
+                self.logger.log_error(
+                    "experimental_trading_orchestrator_creation_failed",
+                    error=str(e),
+                    research_tip="Verificar dependencias del orquestador"
+                )
+                raise
+
+        return self._services['trading_orchestrator']
+
     def create_all_services(self) -> Dict[str, Any]:
         """
-        🎓 Crea todos los servicios educacionales
-        
+        🧪 Crea todos los servicios experimentales
+
         Returns:
-            Diccionario con todos los servicios creados
+            Dict con todos los servicios configurados para investigación
         """
-        services = {
-            "trading_client": self.create_trading_client(),
-            "market_data_provider": self.create_market_data_provider(),
-            "ml_predictor": self.create_ml_predictor(),
-            "risk_manager": self.create_risk_manager(),
-            "notification_service": self.create_notification_service(),
-            "orchestrator": self.create_trading_orchestrator(),
-            "trading_logger": self.trading_logger,
-            "settings": self.settings
-        }
-        
-        logger.info(
-            "🎓 Todos los servicios educacionales creados",
-            services_count=len([s for s in services.values() if s is not None]),
-            educational_note="Sistema completo listo para experimentación"
+        self.logger.log_system_event(
+            "creating_all_experimental_services",
+            dry_run=self.settings.dry_run,
+            testnet=self.settings.binance_testnet,
+            research_note="Inicializando stack completo experimental"
         )
-        
-        return services
-    
-    async def close_all_services(self) -> None:
-        """🎓 Cierra todos los servicios creados"""
+
         try:
-            for service_name, service in self._services_cache.items():
-                if service and hasattr(service, 'close'):
-                    await service.close()
-                    logger.info(
-                        f"🎓 Servicio {service_name} cerrado",
-                        educational_note="Recurso liberado correctamente"
-                    )
-            
-            self._services_cache.clear()
-            
-        except Exception as e:
-            logger.error(
-                "🎓 Error cerrando servicios educacionales",
-                error=str(e),
-                educational_tip="Algunos recursos pueden no haberse liberado"
+            # Crear servicios con inyección de dependencias
+            services = {
+                'trading_client': self.create_trading_client(),
+                'ml_predictor': self.create_ml_predictor(),
+                'trading_orchestrator': self.create_trading_orchestrator()
+            }
+
+            self.logger.log_system_event(
+                "all_experimental_services_created",
+                services_count=len(services),
+                dry_run=self.settings.dry_run,
+                research_note="Stack experimental completo listo"
             )
-    
-    def get_service_status(self) -> Dict[str, Any]:
-        """🎓 Obtiene estado de todos los servicios"""
+
+            return services
+
+        except Exception as e:
+            self.logger.log_error(
+                "experimental_services_creation_failed",
+                error=str(e),
+                research_tip="Verificar configuración completa del sistema"
+            )
+            raise
+
+    def validate_experimental_config(self) -> Dict[str, Any]:
+        """
+        🧪 Valida configuración experimental
+
+        Returns:
+            Dict con status de validación para investigación
+        """
+        validation_results = {
+            'config_valid': True,
+            'warnings': [],
+            'research_notes': []
+        }
+
+        # Validar configuración de trading
+        if not self.settings.dry_run and not self.settings.binance_testnet:
+            validation_results['warnings'].append(
+                "🚨 MODO PRODUCCIÓN: Trading real activado"
+            )
+            validation_results['research_notes'].append(
+                "Configurado para trading real en Binance mainnet"
+            )
+        elif not self.settings.dry_run and self.settings.binance_testnet:
+            validation_results['research_notes'].append(
+                "Configurado para trading real en Binance testnet"
+            )
+        else:
+            validation_results['research_notes'].append(
+                "Configurado para simulación de trading (dry-run)"
+            )
+
+        # Validar API keys
+        try:
+            api_key = self.settings.binance_api_key.get_secret_value()
+            secret = self.settings.binance_secret.get_secret_value()
+
+            if len(api_key) < 10 or len(secret) < 10:
+                validation_results['config_valid'] = False
+                validation_results['warnings'].append(
+                    "🚨 API keys parecen inválidas"
+                )
+        except Exception:
+            validation_results['config_valid'] = False
+            validation_results['warnings'].append(
+                "🚨 Error accediendo a API keys"
+            )
+
+        # Log validación
+        self.logger.log_system_event(
+            "experimental_config_validated",
+            **validation_results,
+            research_note="Configuración validada para investigación"
+        )
+
+        return validation_results
+
+    def get_service_status(self) -> Dict[str, bool]:
+        """
+        🧪 Obtiene status de servicios experimentales
+
+        Returns:
+            Dict con status de cada servicio
+        """
         status = {}
-        
-        for service_name, service in self._services_cache.items():
-            if service:
-                # Intentar obtener status específico del servicio
+
+        for service_name, service in self._services.items():
+            try:
                 if hasattr(service, 'is_connected'):
-                    status[service_name] = {
-                        "created": True,
-                        "connected": service.is_connected()
-                    }
-                elif hasattr(service, 'is_model_loaded'):
-                    status[service_name] = {
-                        "created": True,
-                        "model_loaded": service.is_model_loaded
-                    }
-                elif hasattr(service, 'is_running'):
-                    status[service_name] = {
-                        "created": True,
-                        "running": service.is_running
-                    }
+                    status[service_name] = service.is_connected()
                 else:
-                    status[service_name] = {"created": True}
-            else:
-                status[service_name] = {"created": False}
-        
-        status["educational_note"] = "Estado de servicios experimentales"
+                    status[service_name] = service is not None
+            except Exception:
+                status[service_name] = False
+
+        self.logger.log_system_event(
+            "experimental_services_status_check",
+            **status,
+            research_note="Status de servicios para monitoreo"
+        )
+
         return status
 
+    async def cleanup_services(self) -> None:
+        """
+        🧪 Limpia recursos de servicios experimentales
+        """
+        self.logger.log_system_event(
+            "cleaning_experimental_services",
+            services_count=len(self._services),
+            research_note="Limpiando recursos experimentales"
+        )
 
-class EducationalServiceFactoryBuilder:
-    """
-    🎓 Builder para configurar la factory educacional
-    
-    Permite configurar la factory paso a paso de manera fluida
-    """
-    
-    def __init__(self):
-        self._settings: Optional[TradingBotSettings] = None
-        self._custom_config: Dict[str, Any] = {}
-    
-    def with_settings(self, settings: TradingBotSettings) -> 'EducationalServiceFactoryBuilder':
-        """Configura settings base"""
-        self._settings = settings
-        return self
-    
-    def with_custom_config(self, **config) -> 'EducationalServiceFactoryBuilder':
-        """Agrega configuración personalizada"""
-        self._custom_config.update(config)
-        return self
-    
-    def build(self) -> EducationalServiceFactory:
-        """Construye la factory educacional"""
-        if not self._settings:
-            raise ValueError("🎓 Settings requeridos para construir factory")
-        
-        # Aplicar configuración personalizada si existe
-        if self._custom_config:
-            # Crear nueva configuración con overrides
-            config_dict = self._settings.dict()
-            config_dict.update(self._custom_config)
-            # Recrear settings con nueva configuración
-            self._settings = TradingBotSettings(**config_dict)
-        
-        return EducationalServiceFactory(self._settings)
+        # Cerrar servicios con recursos
+        for service_name, service in self._services.items():
+            try:
+                if hasattr(service, 'close'):
+                    await service.close()
+                    self.logger.log_system_event(
+                        f"experimental_{service_name}_closed",
+                        research_note=f"Servicio {service_name} cerrado"
+                    )
+            except Exception as e:
+                self.logger.log_error(
+                    f"experimental_{service_name}_cleanup_failed",
+                    error=str(e),
+                    research_note=f"Error cerrando {service_name}"
+                )
 
+        # Limpiar referencias
+        self._services.clear()
 
-# Funciones de conveniencia educacionales
-
-def create_educational_trading_system(settings: TradingBotSettings) -> Dict[str, Any]:
-    """
-    🎓 Función de conveniencia para crear sistema completo educacional
-    
-    Args:
-        settings: Configuración educacional del bot
-        
-    Returns:
-        Sistema completo de trading educacional
-    """
-    factory = EducationalServiceFactory(settings)
-    return factory.create_all_services()
-
-
-def create_educational_factory_with_overrides(**overrides) -> EducationalServiceFactory:
-    """
-    🎓 Crea factory con configuración por defecto y overrides educacionales
-    
-    Args:
-        **overrides: Parámetros a sobrescribir en la configuración
-        
-    Returns:
-        Factory configurada para educación
-    """
-    # Configuración por defecto educacional
-    default_config = {
-        "dry_run": True,
-        "binance_testnet": True,
-        "environment": "development",
-        "trading_symbols": ["BTCUSDT"],
-        "trading_interval_seconds": 60,
-        "max_position_percent": 0.01,
-        "max_daily_loss_percent": 0.02
-    }
-    
-    # Aplicar overrides
-    default_config.update(overrides)
-    
-    # Crear settings
-    settings = TradingBotSettings(**default_config)
-    
-    return EducationalServiceFactory(settings) 
+        self.logger.log_system_event(
+            "experimental_services_cleaned",
+            research_note="Recursos experimentales liberados"
+        )

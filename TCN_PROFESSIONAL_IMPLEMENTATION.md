@@ -69,13 +69,13 @@ BNBUSDT: BUY
 ```python
 class ProfessionalPortfolioManager:
     """💼 Gestor Profesional de Portafolio"""
-    
+
     # Obtiene datos reales de Binance
     async def get_portfolio_snapshot(self) -> PortfolioSnapshot
-    
+
     # Replica formato TCN exactamente
     def format_tcn_style_report(self, snapshot) -> str
-    
+
     # Calcula PnL por posición individual
     async def calculate_position_pnl(self, symbol, side, entry_price, quantity, current_price)
 ```
@@ -268,11 +268,11 @@ pip install aiohttp python-dotenv pandas
 **¡El sistema ahora es PROFESIONAL y replica exactamente el formato TCN que tenías!**
 
 - 🔄 **Balance se actualiza automáticamente** desde Binance
-- 📊 **PnL se calcula por posición individual** para decisiones específicas  
+- 📊 **PnL se calcula por posición individual** para decisiones específicas
 - 💰 **Valor total del portafolio** mostrado correctamente
 - 🎨 **Formato TCN idéntico** al bot anterior
 - 💬 **Discord automático** cada 5 minutos
 - 🛡️ **Manejo de errores** robusto
 - 📈 **Datos 100% reales** de Binance
 
-**¡Es mucho mejor que la implementación anterior! 🚀** 
+**¡Es mucho mejor que la implementación anterior! 🚀**

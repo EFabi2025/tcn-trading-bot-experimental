@@ -63,4 +63,4 @@ bcrypt>=3.2.0
 
 # === OPTIONAL: WEB DASHBOARD ===
 # jinja2>=3.1.0
-# static3>=0.7.0 
+# static3>=0.7.0

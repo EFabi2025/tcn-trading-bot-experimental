@@ -10,7 +10,7 @@ try:
     print("Importando TensorFlow...")
     import tensorflow as tf
     print(f"✅ TensorFlow {tf.__version__} importado")
-    
+
     # Probar cargar modelo
     model_path = 'tcn_anti_bias_fixed.h5'
     if os.path.exists(model_path):
@@ -20,7 +20,7 @@ try:
         print("✅ Modelo NO está corrupto")
     else:
         print(f"❌ {model_path} no encontrado")
-        
+
 except Exception as e:
     print(f"❌ Error: {e}")
     print("Modelo probablemente corrupto o TensorFlow tiene problemas")

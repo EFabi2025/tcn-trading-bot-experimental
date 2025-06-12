@@ -21,7 +21,7 @@ Sistema de trailing stop avanzado que implementa las **mejores prácticas de tra
 ### 🧠 **Adaptativo por Activo**
 - ✅ Distancia de trailing basada en volatilidad del activo
 - ✅ BTC: 1.5% (menos volátil)
-- ✅ ETH: 2.0% (volatilidad media)  
+- ✅ ETH: 2.0% (volatilidad media)
 - ✅ BNB: 2.5% (más volátil)
 - ✅ Altcoins: 3.0% (máxima volatilidad)
 
@@ -47,7 +47,7 @@ class Position:
     size: float
     entry_price: float
     current_price: float
-    
+
     # Sistema de Trailing Stop
     trailing_stop_active: bool = False
     trailing_stop_price: Optional[float] = None
@@ -55,7 +55,7 @@ class Position:
     highest_price_since_entry: Optional[float] = None
     trailing_activation_threshold: float = 1.0
     trailing_movements: int = 0
-    
+
     # Stops tradicionales
     stop_loss_price: Optional[float] = None
     take_profit_price: Optional[float] = None
@@ -79,7 +79,7 @@ class Position:
 📍 Nueva posición detectada
     ↓
 🛡️ Configurar Stop Loss tradicional (-3%)
-    ↓  
+    ↓
 🎯 Configurar Take Profit (+6%)
     ↓
 📈 Trailing Stop = INACTIVO (hasta +1% ganancia)
@@ -91,7 +91,7 @@ class Position:
 ```
 📊 Verificar PnL actual
     ↓
-🎯 ¿Ganancia >= +1%? 
+🎯 ¿Ganancia >= +1%?
     ↓ SÍ
 📈 ACTIVAR Trailing Stop
     ↓
@@ -141,7 +141,7 @@ class Position:
 💰 $50,200 (+0.4%) → Trailing INACTIVO
 💰 $50,500 (+1.0%) → 📈 TRAILING ACTIVADO: $49,490
 💰 $51,000 (+2.0%) → 📈 TRAILING MOVIDO: $49,980
-💰 $51,500 (+3.0%) → 📈 TRAILING MOVIDO: $50,470  
+💰 $51,500 (+3.0%) → 📈 TRAILING MOVIDO: $50,470
 💰 $52,000 (+4.0%) → 📈 TRAILING MOVIDO: $50,960
 📉 $51,500 (+3.0%) → Trailing mantiene: $50,960
 📉 $51,000 (+2.0%) → Trailing mantiene: $50,960
@@ -162,7 +162,7 @@ El sistema soporta **múltiples posiciones independientes** del mismo símbolo:
 BTCUSDT: MÚLTIPLES POSICIONES (3)
 ├─ Pos #1: $48,000 → $52,000 (+8.33% = $+4.00) 🟢
 │  💰 0.000100 | 🕐 120min | 📈 Trail: $50,960
-├─ Pos #2: $49,000 → $52,000 (+6.12% = $+3.00) 🟢  
+├─ Pos #2: $49,000 → $52,000 (+6.12% = $+3.00) 🟢
 │  💰 0.000200 | 🕐 80min | 📈 Trail: $50,960
 ├─ Pos #3: $51,000 → $52,000 (+1.96% = $+1.00) 🟢
 │  💰 0.000150 | 🕐 30min | 📈 Trail: INACTIVO
@@ -171,7 +171,7 @@ BTCUSDT: MÚLTIPLES POSICIONES (3)
 
 Cada posición tiene:
 - ✅ Precio de entrada diferente (FIFO real)
-- ✅ Trailing stop independiente 
+- ✅ Trailing stop independiente
 - ✅ PnL calculado individualmente
 - ✅ Tiempo de duración propio
 
@@ -185,7 +185,7 @@ Cada posición tiene:
 # Distancia del trailing stop
 trailing_stop_percent: float = 2.0  # 2% default
 
-# Umbral de activación  
+# Umbral de activación
 trailing_activation_threshold: float = 1.0  # +1% ganancia
 
 # Stops tradicionales
@@ -199,7 +199,7 @@ take_profit_percent: float = 6.0    # +6% ganancia
 def get_atr_based_trailing_distance(symbol: str) -> float:
     atr_multipliers = {
         'BTC': 1.5,    # 3.0% trailing (2.0 * 1.5)
-        'ETH': 2.0,    # 4.0% trailing (2.0 * 2.0)  
+        'ETH': 2.0,    # 4.0% trailing (2.0 * 2.0)
         'BNB': 2.5,    # 5.0% trailing (2.0 * 2.5)
         'ADA': 3.0,    # 6.0% trailing (máximo)
         'default': 2.0
@@ -215,20 +215,20 @@ def get_atr_based_trailing_distance(symbol: str) -> float:
 ```python
 async def _position_monitor(self):
     """🔍 Monitoreo cada 30 segundos"""
-    
+
     # 1. Obtener posiciones actuales
     snapshot = await self.portfolio_manager.get_portfolio_snapshot()
-    
+
     # 2. Actualizar precios en tiempo real
     current_prices = await self.portfolio_manager.update_all_prices(symbols)
-    
+
     # 3. Aplicar trailing stop a cada posición
     for position in snapshot.active_positions:
         updated_position, stop_triggered, reason = \
             self.portfolio_manager.update_trailing_stop_professional(
                 position, current_prices[position.symbol]
             )
-        
+
         # 4. Ejecutar cierre si es necesario
         if stop_triggered:
             await self._close_position(position, reason)
@@ -248,7 +248,7 @@ async def _position_monitor(self):
 └ $50,000.00 → $52,000.00 (+4.00% = $+2.00) 🟢
    💰 0.000100 | 🕐 120min | 📈 Trail: $50,960.00
 
-**ETHUSDT: BUY**  
+**ETHUSDT: BUY**
 └ $2,000.00 → $2,025.00 (+1.25% = $+2.50) 🟢
    💰 0.001000 | 🕐 45min | 📈 Trail: $1,984.50
 ```
@@ -304,7 +304,7 @@ async def _position_monitor(self):
 
 ✅ **Escenarios Probados:**
 1. Activación correcta del trailing stop
-2. Movimiento progresivo del trailing  
+2. Movimiento progresivo del trailing
 3. Ejecución cuando se alcanza el trailing
 4. Múltiples posiciones independientes
 5. Configuración adaptativa por activo
@@ -362,7 +362,7 @@ async def _position_monitor(self):
 
 ### **Archivos Principales:**
 - `professional_portfolio_manager.py` - Lógica core del trailing stop
-- `simple_professional_manager.py` - Integración en trading manager  
+- `simple_professional_manager.py` - Integración en trading manager
 - `test_trailing_stop_professional.py` - Suite de pruebas
 
 ### **Funciones Clave:**
@@ -372,4 +372,4 @@ async def _position_monitor(self):
 
 ---
 
-*🏆 Sistema de Trailing Stop Profesional - Implementando las mejores prácticas de trading algorítmico con datos reales de Binance.* 
+*🏆 Sistema de Trailing Stop Profesional - Implementando las mejores prácticas de trading algorítmico con datos reales de Binance.*
