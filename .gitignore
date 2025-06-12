@@ -133,8 +133,15 @@ exports/
 
 # ⚠️ PERMITIR archivos de configuración de ejemplo
 !config_example.env
-!*_example.*
+!*_example.py
+!*_example.env
+!*_example.json
+!*_example.txt
+!*_example.md
 !sample_data/
+
+# 🚫 PERO NUNCA bases de datos de ejemplo
+*_example.db
 
 # 🔄 BACKUPS Y ARCHIVOS TEMPORALES
 # ================================
