@@ -1,3 +1,5 @@
+
+
 #!/usr/bin/env python3
 """
 🗄️ TRADING DATABASE LAYER - EJEMPLO DE CONFIGURACIÓN
@@ -128,7 +130,7 @@ class TradingDatabase:
         # Para SQLite (desarrollo): 'sqlite:///trading_bot.db'
         # Para PostgreSQL (producción): 'postgresql://user:password@localhost/dbname'
         self.database_url = database_url or os.getenv('DATABASE_URL', 'sqlite:///trading_bot_example.db')
-        
+
         self.engine = create_engine(self.database_url, echo=False)
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
 
@@ -181,7 +183,7 @@ class TradingDatabase:
             return None
 
     # ... resto de métodos implementados de forma similar ...
-    
+
     async def get_trades_history(self, symbol: str = None, days: int = 30, is_active: bool = None) -> List[Dict]:
         """📊 Obtener historial de trades"""
         # Implementación completa disponible en archivo real
@@ -201,4 +203,4 @@ class TradingDatabase:
 if __name__ == "__main__":
     # CONFIGURAR: Tu configuración específica aquí
     db = TradingDatabase()
-    print("📁 Archivo de ejemplo - Copiar como 'trading_database.py' y configurar apropiadamente") 
+    print("📁 Archivo de ejemplo - Copiar como 'trading_database.py' y configurar apropiadamente")
