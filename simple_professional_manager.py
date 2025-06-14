@@ -1149,7 +1149,7 @@ class SimpleProfessionalTradingManager:
             trailing_updates = []
 
             # 3. ✅ NUEVO: Procesar cada posición individualmente con trailing stop
-            for position in snapshot.active_positions:
+            for i, position in enumerate(snapshot.active_positions):
                 try:
                     current_price = current_prices.get(position.symbol, position.current_price)
 
