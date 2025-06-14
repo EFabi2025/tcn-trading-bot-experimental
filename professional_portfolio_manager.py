@@ -670,20 +670,24 @@ class ProfessionalPortfolioManager:
                 # 2. Calcular ganancia actual
                 current_pnl_percent = ((current_price - position.entry_price) / position.entry_price) * 100
 
-                # 3. ✅ MEJORA HÍBRIDA: Trailing dinámico según ganancia
+                # 3. ✅ MEJORA HÍBRIDA: Trailing dinámico según ganancia - MÁS AGRESIVO
                 if current_pnl_percent > 8.0:
-                    dynamic_trailing_percent = 1.2  # Muy agresivo con grandes ganancias
-                elif current_pnl_percent > 4.0:
-                    dynamic_trailing_percent = 1.5  # Moderadamente agresivo
+                    dynamic_trailing_percent = 0.8  # Muy agresivo con grandes ganancias
+                elif current_pnl_percent > 5.0:
+                    dynamic_trailing_percent = 1.0  # Agresivo con buenas ganancias
+                elif current_pnl_percent > 3.0:
+                    dynamic_trailing_percent = 1.2  # Moderadamente agresivo
                 elif current_pnl_percent > 2.0:
-                    dynamic_trailing_percent = 1.8  # Ligeramente más agresivo
+                    dynamic_trailing_percent = 1.5  # Ligeramente agresivo
                 else:
-                    dynamic_trailing_percent = 2.0  # Conservador por defecto
+                    dynamic_trailing_percent = 2.0  # Conservador solo al inicio
 
-                # 4. ✅ MEJORA HÍBRIDA: Activación adaptativa
+                # 4. ✅ MEJORA HÍBRIDA: Activación más temprana
                 activation_threshold = position.trailing_activation_threshold
-                if current_pnl_percent > 3.0:
-                    activation_threshold = 0.8  # Activar más temprano si ya hay buena ganancia
+                if current_pnl_percent > 2.0:
+                    activation_threshold = 0.5  # Activar muy temprano si ya hay ganancia
+                elif current_pnl_percent > 1.5:
+                    activation_threshold = 0.7  # Activar temprano
 
                 # 5. ✅ CORRECCIÓN: Verificar si debe activarse el trailing stop
                 if not position.trailing_stop_active and current_pnl_percent >= activation_threshold:
@@ -693,9 +697,13 @@ class ProfessionalPortfolioManager:
                     max_price_reached = position.highest_price_since_entry
                     proposed_trailing = max_price_reached * (1 - dynamic_trailing_percent / 100)
 
-                    # ✅ MEJORA HÍBRIDA: Protección mínima adaptativa
-                    if current_pnl_percent > 5.0:
-                        min_protection = 0.006  # 0.6% si ya hay buena ganancia
+                    # ✅ MEJORA HÍBRIDA: Protección mínima más agresiva
+                    if current_pnl_percent > 8.0:
+                        min_protection = 0.004  # 0.4% para ganancias enormes
+                    elif current_pnl_percent > 5.0:
+                        min_protection = 0.005  # 0.5% para buenas ganancias
+                    elif current_pnl_percent > 3.0:
+                        min_protection = 0.006  # 0.6% para ganancias moderadas
                     else:
                         min_protection = 0.009  # 0.9% protección estándar
 
@@ -706,11 +714,11 @@ class ProfessionalPortfolioManager:
 
                     protection_percent = ((position.trailing_stop_price - position.entry_price) / position.entry_price) * 100
 
-                    print(f"📈 TRAILING HÍBRIDO ACTIVADO {position.symbol} Pos #{position.order_id}:")
+                    print(f"📈 TRAILING HÍBRIDO AGRESIVO ACTIVADO {position.symbol} Pos #{position.order_id}:")
                     print(f"   🎯 Ganancia actual: +{current_pnl_percent:.2f}%")
                     print(f"   🏔️ Máximo alcanzado: ${max_price_reached:.4f}")
-                    print(f"   📈 Trailing dinámico: {dynamic_trailing_percent}%")
-                    print(f"   🛡️ Protección adaptativa: +{protection_percent:.2f}%")
+                    print(f"   📈 Trailing agresivo: {dynamic_trailing_percent}%")
+                    print(f"   🛡️ Protección agresiva: +{protection_percent:.2f}%")
                     print(f"   🚀 Umbral usado: +{activation_threshold:.1f}%")
                     print(f"   💰 Protección mínima: +{min_protection*100:.1f}%")
 
@@ -721,9 +729,13 @@ class ProfessionalPortfolioManager:
                 elif position.trailing_stop_active:
                     new_trailing_price = position.highest_price_since_entry * (1 - dynamic_trailing_percent / 100)
 
-                    # ✅ MEJORA HÍBRIDA: Protección mínima adaptativa en actualizaciones
-                    if current_pnl_percent > 5.0:
-                        min_protection = 0.006  # 0.6% si ya hay buena ganancia
+                    # ✅ MEJORA HÍBRIDA: Protección mínima más agresiva en actualizaciones
+                    if current_pnl_percent > 8.0:
+                        min_protection = 0.004  # 0.4% para ganancias enormes
+                    elif current_pnl_percent > 5.0:
+                        min_protection = 0.005  # 0.5% para buenas ganancias
+                    elif current_pnl_percent > 3.0:
+                        min_protection = 0.006  # 0.6% para ganancias moderadas
                     else:
                         min_protection = 0.009  # 0.9% protección estándar
 
@@ -738,12 +750,12 @@ class ProfessionalPortfolioManager:
 
                         profit_protection = ((position.trailing_stop_price - position.entry_price) / position.entry_price) * 100
 
-                        print(f"📈 TRAILING HÍBRIDO MOVIDO {position.symbol} Pos #{position.order_id}:")
+                        print(f"📈 TRAILING HÍBRIDO AGRESIVO MOVIDO {position.symbol} Pos #{position.order_id}:")
                         print(f"   🔄 ${old_price:.4f} → ${new_trailing_price:.4f}")
                         print(f"   🏔️ Máximo: ${position.highest_price_since_entry:.4f}")
-                        print(f"   📈 Trailing dinámico: {dynamic_trailing_percent}%")
+                        print(f"   📈 Trailing agresivo: {dynamic_trailing_percent}%")
                         print(f"   🛡️ Protegiendo: +{profit_protection:.2f}% ganancia")
-                        print(f"   💰 Protección adaptativa: +{min_protection*100:.1f}%")
+                        print(f"   💰 Protección agresiva: +{min_protection*100:.1f}%")
                         print(f"   📊 Movimiento #{position.trailing_movements}")
 
                         # ✅ NUEVO: Guardar estado después de movimiento
@@ -753,8 +765,13 @@ class ProfessionalPortfolioManager:
                 if position.trailing_stop_active and current_price <= position.trailing_stop_price:
                     final_pnl = ((position.trailing_stop_price - position.entry_price) / position.entry_price) * 100
 
-                    # ✅ MEJORA HÍBRIDA: Umbral de ejecución adaptativo
-                    min_execution_threshold = 0.6 if current_pnl_percent > 5.0 else 0.9
+                    # ✅ MEJORA HÍBRIDA: Umbral de ejecución más agresivo
+                    if current_pnl_percent > 5.0:
+                        min_execution_threshold = 0.4  # Muy agresivo para buenas ganancias
+                    elif current_pnl_percent > 3.0:
+                        min_execution_threshold = 0.5  # Agresivo para ganancias moderadas
+                    else:
+                        min_execution_threshold = 0.6  # Menos agresivo al inicio
 
                     if final_pnl >= min_execution_threshold:
                         stop_triggered = True
@@ -763,12 +780,12 @@ class ProfessionalPortfolioManager:
                         max_profit = ((position.highest_price_since_entry - position.entry_price) / position.entry_price) * 100
                         net_profit_after_commissions = final_pnl - 0.2  # Estimado comisiones reales
 
-                        print(f"🛑 TRAILING HÍBRIDO EJECUTADO {position.symbol} Pos #{position.order_id}:")
+                        print(f"🛑 TRAILING HÍBRIDO AGRESIVO EJECUTADO {position.symbol} Pos #{position.order_id}:")
                         print(f"   📉 Precio: ${current_price:.4f} <= Trailing: ${position.trailing_stop_price:.4f}")
                         print(f"   💰 PnL Final: +{final_pnl:.2f}% ✅")
                         print(f"   💸 Ganancia neta: +{net_profit_after_commissions:.2f}%")
                         print(f"   🏔️ Máximo alcanzado: +{max_profit:.2f}%")
-                        print(f"   📈 Trailing dinámico usado: {dynamic_trailing_percent}%")
+                        print(f"   📈 Trailing agresivo usado: {dynamic_trailing_percent}%")
                         print(f"   🎯 Umbral ejecución: {min_execution_threshold:.1f}%")
                         print(f"   📊 Movimientos: {position.trailing_movements}")
 
