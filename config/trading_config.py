@@ -54,7 +54,7 @@ class TradingConfig:
     # ✅ NUEVO: Configuración de Diversificación de Portafolio
     PORTFOLIO_DIVERSIFICATION = {
         # Límites de concentración por símbolo
-        'MAX_SYMBOL_CONCENTRATION_PERCENT': 40.0,  # Máximo 40% del portafolio en un símbolo
+        'MAX_SYMBOL_CONCENTRATION_PERCENT': 50.0,  # Máximo 40% del portafolio en un símbolo
         'MAX_POSITIONS_PER_SYMBOL': 3,             # Máximo 3 posiciones por símbolo
         'MIN_SYMBOLS_IN_PORTFOLIO': 2,             # Mínimo 2 símbolos diferentes
 
@@ -67,7 +67,7 @@ class TradingConfig:
             'DOTUSDT': 'ALT_CRYPTO',
             'SOLUSDT': 'ALT_CRYPTO'
         },
-        'MAX_CATEGORY_CONCENTRATION_PERCENT': 60.0,  # Máximo 60% en una categoría
+        'MAX_CATEGORY_CONCENTRATION_PERCENT': 90.0,  # Máximo 60% en una categoría
 
         # Gestión de posiciones existentes
         'RESPECT_EXISTING_POSITIONS': True,         # No liquidar posiciones existentes

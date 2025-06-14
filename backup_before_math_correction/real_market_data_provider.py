@@ -1,24 +1,18 @@
 #!/usr/bin/env python3
 """
-🔄 REAL MARKET DATA PROVIDER PROFESIONAL - ACTUALIZADO
-=====================================================
+🔄 REAL MARKET DATA PROVIDER PROFESIONAL
+=====================================
 
 Módulo de datos reales de mercado con las 66 features EXACTAS
-usando TA-Lib para consistencia total con tcn_definitivo_predictor.py
+usadas en el entrenamiento de los modelos TCN originales.
 
 Características:
-- ✅ 66 features técnicas usando TA-Lib (CORREGIDO)
-- ✅ Consistencia total con sistema principal
-- ✅ Datos reales de Binance vía klines
-- ✅ Normalización profesional con RobustScaler
-- ✅ Compatibilidad con TensorFlow 2.15.0
-- ✅ Secuencias temporales de 32 timesteps
-- ✅ Input shape: (None, 32, 66)
-
-CAMBIOS REALIZADOS:
-- Migrado de 21 features manuales a 66 features TA-Lib
-- Eliminados errores matemáticos en RSI, ATR, Bollinger Bands
-- Compatibilidad total con tcn_definitivo_predictor.py
+- 66 features técnicas exactas del entrenamiento (FIXED_FEATURE_LIST)
+- Datos reales de Binance vía klines
+- Normalización profesional con RobustScaler
+- Compatibilidad con TensorFlow 2.15.0
+- Secuencias temporales de 32 timesteps
+- Input shape: (None, 32, 66)
 """
 
 import asyncio
@@ -47,49 +41,40 @@ class RealMarketDataProvider:
         self.cache = {}
         self.cache_duration = 60  # 1 minuto de caché
 
-        # LISTA FIJA DE 66 FEATURES EXACTAS - COMPATIBLE CON tcn_definitivo_predictor.py
+        # LISTA FIJA DE 21 FEATURES EXACTAS para modelos tcn_final_*.h5
         self.FIXED_FEATURE_LIST = [
-            # === MOMENTUM INDICATORS (15 features) ===
-            'rsi_14', 'rsi_21', 'rsi_7',
+            # 1. OHLCV básicos (5 features)
+            'open', 'high', 'low', 'close', 'volume',
+
+            # 2. Returns múltiples períodos (5 features)
+            'returns_1', 'returns_3', 'returns_5', 'returns_10', 'returns_20',
+
+            # 3. Moving Averages (3 features)
+            'sma_5', 'sma_20', 'ema_12',
+
+            # 4. RSI (1 feature)
+            'rsi_14',
+
+            # 5. MACD completo (3 features)
             'macd', 'macd_signal', 'macd_histogram',
-            'stoch_k', 'stoch_d', 'williams_r',
-            'roc_10', 'roc_20', 'momentum_10', 'momentum_20',
-            'cci_14', 'cci_20',
 
-            # === TREND INDICATORS (12 features) ===
-            'sma_10', 'sma_20', 'sma_50',
-            'ema_10', 'ema_20', 'ema_50',
-            'adx_14', 'plus_di', 'minus_di',
-            'psar', 'aroon_up', 'aroon_down',
+            # 6. Bollinger Bands (2 features)
+            'bb_position', 'bb_width',
 
-            # === VOLATILITY INDICATORS (10 features) ===
-            'bb_upper', 'bb_middle', 'bb_lower', 'bb_width', 'bb_position',
-            'atr_14', 'atr_20', 'true_range', 'natr_14', 'natr_20',
+            # 7. Volume analysis (1 feature)
+            'volume_ratio',
 
-            # === VOLUME INDICATORS (8 features) ===
-            'ad', 'adosc', 'obv', 'volume_sma_10', 'volume_sma_20',
-            'volume_ratio', 'mfi_14', 'mfi_20',
-
-            # === PRICE PATTERNS (8 features) ===
-            'hl_ratio', 'oc_ratio', 'price_position',
-            'price_change_1', 'price_change_5', 'price_change_10',
-            'volatility_10', 'volatility_20',
-
-            # === MARKET STRUCTURE (8 features) ===
-            'higher_high', 'lower_low', 'uptrend_strength', 'downtrend_strength',
-            'resistance_touch', 'support_touch', 'efficiency_ratio', 'fractal_dimension',
-
-            # === MOMENTUM DERIVATIVES (5 features) ===
-            'rsi_momentum', 'macd_momentum', 'ad_momentum', 'volume_momentum', 'price_acceleration'
+            # 8. Volatilidad (1 feature)
+            'volatility'
         ]
 
-        # Verificar que sean exactamente 66 features
-        assert len(self.FIXED_FEATURE_LIST) == 66, f"Error: Se requieren exactamente 66 features, encontradas {len(self.FIXED_FEATURE_LIST)}"
+        # Verificar que sean exactamente 21 features
+        assert len(self.FIXED_FEATURE_LIST) == 21, f"Error: Se requieren exactamente 21 features, encontradas {len(self.FIXED_FEATURE_LIST)}"
 
         # Inicializar normalizadores
         self.feature_scalers = {}
 
-        print(f"✅ RealMarketDataProvider inicializado con {len(self.FIXED_FEATURE_LIST)} features exactas - COMPATIBLE CON tcn_definitivo_predictor.py")
+        print(f"✅ RealMarketDataProvider inicializado con {len(self.FIXED_FEATURE_LIST)} features exactas para modelos tcn_final")
 
     async def get_real_market_features(self, symbol: str, limit: int = 200) -> Optional[np.ndarray]:
         """
@@ -100,7 +85,7 @@ class RealMarketDataProvider:
             limit: Número de velas (mínimo 200 para cálculos técnicos)
 
         Returns:
-            Array numpy con shape (32, 66) o None si hay error
+            Array numpy con shape (50, 21) o None si hay error
         """
         try:
             # Verificar caché
@@ -126,24 +111,24 @@ class RealMarketDataProvider:
                 print(f"❌ DataFrame inválido para {symbol}")
                 return None
 
-            # Crear todas las 66 features técnicas usando TA-Lib
+            # Crear todas las 66 features técnicas
             features_df = await self._create_all_technical_features(df)
 
             if features_df is None:
                 print(f"❌ Error creando features para {symbol}")
                 return None
 
-            # Extraer las últimas 32 filas (timesteps) para compatibilidad con TCN
-            if len(features_df) < 32:
-                print(f"❌ Datos insuficientes para secuencia: {len(features_df)} < 32")
+            # Extraer las últimas 50 filas (timesteps) para modelos tcn_final
+            if len(features_df) < 50:
+                print(f"❌ Datos insuficientes para secuencia: {len(features_df)} < 50")
                 return None
 
-            # Tomar las últimas 32 filas y las 66 features
-            sequence_data = features_df.tail(32)[self.FIXED_FEATURE_LIST].values
+            # Tomar las últimas 50 filas y las 21 features para tcn_final
+            sequence_data = features_df.tail(50)[self.FIXED_FEATURE_LIST].values
 
             # Verificar shape final
-            if sequence_data.shape != (32, 66):
-                print(f"❌ Shape incorrecto: {sequence_data.shape} != (32, 66)")
+            if sequence_data.shape != (50, 21):
+                print(f"❌ Shape incorrecto: {sequence_data.shape} != (50, 21)")
                 return None
 
             # Guardar en caché
@@ -220,177 +205,68 @@ class RealMarketDataProvider:
 
     async def _create_all_technical_features(self, df: pd.DataFrame) -> Optional[pd.DataFrame]:
         """
-        Crear las 66 features técnicas EXACTAS usando TA-Lib
-        Replica exactamente la lógica de tcn_definitivo_predictor.py
+        Crear las 21 features exactas para modelos tcn_final
         """
         try:
-            print("🔧 Calculando las 66 features exactas usando TA-Lib...")
+            print("🔧 Calculando las 21 features exactas para tcn_final...")
 
-            close = df['close'].values
-            high = df['high'].values
-            low = df['low'].values
-            volume = df['volume'].values
+            features_df = df.copy()
 
-            features = pd.DataFrame(index=df.index)
+            # === 1. OHLCV básicos (5 features) ===
+            # Ya están en el DataFrame
 
-            # === MOMENTUM INDICATORS (15 features) ===
-            features['rsi_14'] = talib.RSI(close, timeperiod=14)
-            features['rsi_21'] = talib.RSI(close, timeperiod=21)
-            features['rsi_7'] = talib.RSI(close, timeperiod=7)
+            # === 2. Returns múltiples períodos (5 features) ===
+            features_df['returns_1'] = features_df['close'].pct_change(periods=1)
+            features_df['returns_3'] = features_df['close'].pct_change(periods=3)
+            features_df['returns_5'] = features_df['close'].pct_change(periods=5)
+            features_df['returns_10'] = features_df['close'].pct_change(periods=10)
+            features_df['returns_20'] = features_df['close'].pct_change(periods=20)
 
-            # MACD family
-            macd, macd_signal, macd_hist = talib.MACD(close)
-            features['macd'] = macd
-            features['macd_signal'] = macd_signal
-            features['macd_histogram'] = macd_hist
+            # === 3. Moving Averages (3 features) ===
+            features_df['sma_5'] = features_df['close'].rolling(window=5, min_periods=1).mean()
+            features_df['sma_20'] = features_df['close'].rolling(window=20, min_periods=1).mean()
+            features_df['ema_12'] = features_df['close'].ewm(span=12, min_periods=1).mean()
 
-            # Stochastic
-            slowk, slowd = talib.STOCH(high, low, close)
-            features['stoch_k'] = slowk
-            features['stoch_d'] = slowd
+            # === 4. RSI (1 feature) ===
+            features_df['rsi_14'] = await self._calculate_rsi(features_df['close'], 14)
 
-            # Williams %R
-            features['williams_r'] = talib.WILLR(high, low, close)
+            # === 5. MACD completo (3 features) ===
+            ema_26 = features_df['close'].ewm(span=26, min_periods=1).mean()
+            features_df['macd'] = features_df['ema_12'] - ema_26
+            features_df['macd_signal'] = features_df['macd'].ewm(span=9, min_periods=1).mean()
+            features_df['macd_histogram'] = features_df['macd'] - features_df['macd_signal']
 
-            # Rate of Change
-            features['roc_10'] = talib.ROC(close, timeperiod=10)
-            features['roc_20'] = talib.ROC(close, timeperiod=20)
+            # === 6. Bollinger Bands (2 features) ===
+            bb_middle = features_df['sma_20']
+            bb_std = features_df['close'].rolling(window=20, min_periods=1).std()
+            bb_upper = bb_middle + (bb_std * 2)
+            bb_lower = bb_middle - (bb_std * 2)
+            bb_range = bb_upper - bb_lower
+            bb_range = bb_range.replace(0, 1e-8)  # Evitar división por cero
+            features_df['bb_position'] = (features_df['close'] - bb_lower) / bb_range
+            features_df['bb_width'] = bb_range / bb_middle
 
-            # Momentum
-            features['momentum_10'] = talib.MOM(close, timeperiod=10)
-            features['momentum_20'] = talib.MOM(close, timeperiod=20)
+            # === 7. Volume analysis (1 feature) ===
+            volume_sma_20 = features_df['volume'].rolling(window=20, min_periods=1).mean()
+            volume_sma_20 = volume_sma_20.replace(0, 1e-8)  # Evitar división por cero
+            features_df['volume_ratio'] = features_df['volume'] / volume_sma_20
 
-            # CCI
-            features['cci_14'] = talib.CCI(high, low, close, timeperiod=14)
-            features['cci_20'] = talib.CCI(high, low, close, timeperiod=20)
+            # === 8. Volatilidad (1 feature) ===
+            features_df['volatility'] = features_df['close'].pct_change().rolling(window=20, min_periods=1).std()
 
-            # === TREND INDICATORS (12 features) ===
-            # Moving Averages
-            features['sma_10'] = talib.SMA(close, timeperiod=10)
-            features['sma_20'] = talib.SMA(close, timeperiod=20)
-            features['sma_50'] = talib.SMA(close, timeperiod=50)
-            features['ema_10'] = talib.EMA(close, timeperiod=10)
-            features['ema_20'] = talib.EMA(close, timeperiod=20)
-            features['ema_50'] = talib.EMA(close, timeperiod=50)
+            # === LIMPIEZA FINAL ===
+            # Reemplazar infinitos y NaN
+            features_df = features_df.replace([np.inf, -np.inf], np.nan)
+            features_df = features_df.fillna(method='ffill').fillna(method='bfill').fillna(0)
 
-            # ADX family
-            features['adx_14'] = talib.ADX(high, low, close, timeperiod=14)
-            features['plus_di'] = talib.PLUS_DI(high, low, close, timeperiod=14)
-            features['minus_di'] = talib.MINUS_DI(high, low, close, timeperiod=14)
-
-            # PSAR
-            features['psar'] = talib.SAR(high, low)
-
-            # Aroon
-            aroon_down, aroon_up = talib.AROON(high, low, timeperiod=14)
-            features['aroon_up'] = aroon_up
-            features['aroon_down'] = aroon_down
-
-            # === VOLATILITY INDICATORS (10 features) ===
-            # Bollinger Bands
-            bb_upper, bb_middle, bb_lower = talib.BBANDS(close)
-            features['bb_upper'] = bb_upper
-            features['bb_middle'] = bb_middle
-            features['bb_lower'] = bb_lower
-            features['bb_width'] = (bb_upper - bb_lower) / bb_middle
-            features['bb_position'] = (close - bb_lower) / (bb_upper - bb_lower)
-
-            # ATR
-            features['atr_14'] = talib.ATR(high, low, close, timeperiod=14)
-            features['atr_20'] = talib.ATR(high, low, close, timeperiod=20)
-
-            # True Range
-            features['true_range'] = talib.TRANGE(high, low, close)
-
-            # Normalized ATR
-            features['natr_14'] = talib.NATR(high, low, close, timeperiod=14)
-            features['natr_20'] = talib.NATR(high, low, close, timeperiod=20)
-
-            # === VOLUME INDICATORS (8 features) ===
-            features['ad'] = talib.AD(high, low, close, volume)
-            features['adosc'] = talib.ADOSC(high, low, close, volume)
-            features['obv'] = talib.OBV(close, volume)
-
-            # Volume SMA
-            features['volume_sma_10'] = talib.SMA(volume, timeperiod=10)
-            features['volume_sma_20'] = talib.SMA(volume, timeperiod=20)
-            features['volume_ratio'] = volume / features['volume_sma_20']
-
-            # Money Flow Index
-            features['mfi_14'] = talib.MFI(high, low, close, volume, timeperiod=14)
-            features['mfi_20'] = talib.MFI(high, low, close, volume, timeperiod=20)
-
-            # === PRICE PATTERNS (8 features) ===
-            # Price ratios
-            features['hl_ratio'] = (high - low) / close
-            features['oc_ratio'] = (close - df['open'].values) / close
-            features['price_position'] = (close - low) / (high - low)
-
-            # Price momentum
-            close_series = pd.Series(close, index=features.index)
-            features['price_change_1'] = close_series.pct_change(1)
-            features['price_change_5'] = close_series.pct_change(5)
-            features['price_change_10'] = close_series.pct_change(10)
-
-            # Volatility
-            returns = np.log(close_series / close_series.shift(1))
-            features['volatility_10'] = returns.rolling(10).std()
-            features['volatility_20'] = returns.rolling(20).std()
-
-            # === MARKET STRUCTURE (8 features) ===
-            # Higher highs, lower lows
-            features['higher_high'] = (pd.Series(high, index=features.index) > pd.Series(high, index=features.index).shift(1)).astype(int)
-            features['lower_low'] = (pd.Series(low, index=features.index) < pd.Series(low, index=features.index).shift(1)).astype(int)
-
-            # Trend strength
-            features['uptrend_strength'] = (close_series > close_series.shift(1)).rolling(10).sum() / 10
-            features['downtrend_strength'] = (close_series < close_series.shift(1)).rolling(10).sum() / 10
-
-            # Support/Resistance
-            features['resistance_touch'] = (close_series >= close_series.rolling(20).max() * 0.99).astype(int)
-            features['support_touch'] = (close_series <= close_series.rolling(20).min() * 1.01).astype(int)
-
-            # Market efficiency
-            features['efficiency_ratio'] = (np.abs(close_series - close_series.shift(10)) /
-                                          (np.abs(close_series.diff()).rolling(10).sum())).fillna(0)
-
-            # Fractal dimension (simplificado)
-            features['fractal_dimension'] = 0.5  # Valor constante por ahora
-
-            # === MOMENTUM DERIVATIVES (5 features) ===
-            features['rsi_momentum'] = features['rsi_14'].diff().fillna(0)
-            features['macd_momentum'] = pd.Series(macd_hist, index=features.index).diff().fillna(0)
-            features['ad_momentum'] = features['ad'].diff().fillna(0)
-            features['volume_momentum'] = pd.Series(volume, index=features.index).pct_change().fillna(0)
-            features['price_acceleration'] = features['price_change_1'].diff().fillna(0)
-
-            # Limpiar datos
-            features = features.fillna(method='ffill').fillna(0)
-            features = features.replace([np.inf, -np.inf], 0)
-
-            # Clip valores extremos
-            for col in features.columns:
-                if features[col].dtype in ['float64', 'int64']:
-                    q99 = features[col].quantile(0.99)
-                    q01 = features[col].quantile(0.01)
-                    features[col] = features[col].clip(q01, q99)
-
-            # Verificar que tenemos exactamente 66 features
-            if len(features.columns) != 66:
-                print(f"⚠️ Features creados: {len(features.columns)}, esperados: 66")
-                # Ajustar si es necesario
-                while len(features.columns) < 66:
-                    features[f'padding_{len(features.columns)}'] = 0
-                features = features.iloc[:, :66]  # Tomar solo las primeras 66
-
-            # Verificar que tenemos todas las features requeridas
-            missing_features = [f for f in self.FIXED_FEATURE_LIST if f not in features.columns]
+            # Verificar que tenemos todas las features
+            missing_features = [f for f in self.FIXED_FEATURE_LIST if f not in features_df.columns]
             if missing_features:
                 print(f"⚠️ Features faltantes: {missing_features}")
                 return None
 
-            print(f"✅ 66 features técnicas calculadas correctamente usando TA-Lib")
-            return features
+            print(f"✅ 21 features técnicas calculadas correctamente para tcn_final")
+            return features_df
 
         except Exception as e:
             print(f"❌ Error creando features técnicas: {e}")
@@ -526,7 +402,7 @@ class MarketDataValidator:
             # 3. Verificar varianza (evitar features constantes)
             feature_variances = np.var(features, axis=0)
             constant_features = np.sum(feature_variances < 1e-10)
-            if constant_features > 15:  # Permitir algunas features constantes (ajustado para 66)
+            if constant_features > 10:  # Permitir algunas features constantes
                 print(f"⚠️ Muchas features constantes en {symbol}: {constant_features}/66")
                 return False
 
