@@ -98,11 +98,23 @@ class ProfessionalPortfolioManager:
         """🚀 Inicializar Portfolio Manager"""
         self.api_key = api_key
         self.secret_key = secret_key
-        self.base_url = base_url
-
-        # Cache de precios para evitar llamadas innecesarias
+        self.base_url = base_url.rstrip('/')
+        self.session = None
         self.price_cache = {}
-        self.last_price_update = None
+        self.last_price_update = {}
+
+        # ✅ NUEVO: Cache para persistir estado del trailing stop
+        self.trailing_stop_cache = {}  # {position_id: trailing_state}
+
+        # Configuración de timeouts y límites
+        self.request_timeout = 10
+        self.max_retries = 3
+        self.rate_limit_delay = 0.1
+
+        # Métricas
+        self.api_calls_count = 0
+        self.last_api_call = None
+        self.error_count = 0
 
         # ✅ NUEVO: Cache de órdenes para tracking de posiciones
         self.orders_cache = {}
@@ -114,10 +126,6 @@ class ProfessionalPortfolioManager:
 
         # ✅ NUEVO: Configuración para historial de órdenes
         self.days_to_lookback = 30  # Días hacia atrás para buscar órdenes
-
-        # Métricas
-        self.api_calls_count = 0
-        self.last_snapshot_time = None
 
     def _generate_signature(self, params: str) -> str:
         """🔐 Generar firma HMAC SHA256 para Binance"""
@@ -565,33 +573,80 @@ class ProfessionalPortfolioManager:
 
     # ✅ NUEVO: Sistema de Trailing Stop Profesional
 
+    def _save_trailing_state(self, position: Position):
+        """💾 Guardar estado del trailing stop en cache"""
+        try:
+            if position.order_id:
+                self.trailing_stop_cache[position.order_id] = {
+                    'trailing_stop_active': position.trailing_stop_active,
+                    'trailing_stop_price': position.trailing_stop_price,
+                    'highest_price_since_entry': position.highest_price_since_entry,
+                    'lowest_price_since_entry': position.lowest_price_since_entry,
+                    'trailing_movements': position.trailing_movements,
+                    'last_trailing_update': position.last_trailing_update
+                }
+        except Exception as e:
+            print(f"❌ Error guardando estado trailing para {position.symbol}: {e}")
+
+    def _restore_trailing_state(self, position: Position) -> Position:
+        """🔄 Restaurar estado del trailing stop desde cache"""
+        try:
+            if position.order_id and position.order_id in self.trailing_stop_cache:
+                cached_state = self.trailing_stop_cache[position.order_id]
+
+                position.trailing_stop_active = cached_state.get('trailing_stop_active', False)
+                position.trailing_stop_price = cached_state.get('trailing_stop_price', None)
+                position.highest_price_since_entry = cached_state.get('highest_price_since_entry', position.entry_price)
+                position.lowest_price_since_entry = cached_state.get('lowest_price_since_entry', position.entry_price)
+                position.trailing_movements = cached_state.get('trailing_movements', 0)
+                position.last_trailing_update = cached_state.get('last_trailing_update', None)
+
+                return position
+        except Exception as e:
+            print(f"❌ Error restaurando estado trailing para {position.symbol}: {e}")
+
+        return position
+
     def initialize_position_stops(self, position: Position) -> Position:
         """🛡️ Inicializar Stop Loss, Take Profit y Trailing Stop para una posición"""
         try:
-            # Configurar Stop Loss y Take Profit tradicionales
-            if position.side == 'BUY':
-                position.stop_loss_price = position.entry_price * (1 - position.stop_loss_percent / 100)
-                position.take_profit_price = position.entry_price * (1 + position.take_profit_percent / 100)
-                position.highest_price_since_entry = position.entry_price
-                position.lowest_price_since_entry = None
-            else:  # SELL (para futuros)
-                position.stop_loss_price = position.entry_price * (1 + position.stop_loss_percent / 100)
-                position.take_profit_price = position.entry_price * (1 - position.take_profit_percent / 100)
-                position.lowest_price_since_entry = position.entry_price
-                position.highest_price_since_entry = None
+            # ✅ PRIMERO: Intentar restaurar estado previo del trailing stop
+            position = self._restore_trailing_state(position)
 
-            # Trailing stop inicialmente inactivo
-            position.trailing_stop_active = False
-            position.trailing_stop_price = None
-            position.last_trailing_update = datetime.now()
-            position.trailing_movements = 0
+            # Solo inicializar si no hay estado previo
+            if not hasattr(position, 'trailing_stop_active') or position.trailing_stop_active is None:
+                # Configurar Stop Loss y Take Profit tradicionales
+                if position.side == 'BUY':
+                    position.stop_loss_price = position.entry_price * (1 - position.stop_loss_percent / 100)
+                    position.take_profit_price = position.entry_price * (1 + position.take_profit_percent / 100)
+                    position.highest_price_since_entry = position.entry_price
+                    position.lowest_price_since_entry = None
+                else:  # SELL (para futuros)
+                    position.stop_loss_price = position.entry_price * (1 + position.stop_loss_percent / 100)
+                    position.take_profit_price = position.entry_price * (1 - position.take_profit_percent / 100)
+                    position.lowest_price_since_entry = position.entry_price
+                    position.highest_price_since_entry = None
 
-            print(f"🛡️ Stops inicializados para {position.symbol} Pos #{position.order_id}:")
-            print(f"   📍 Entrada: ${position.entry_price:.4f}")
-            print(f"   🛑 Stop Loss: ${position.stop_loss_price:.4f} (-{position.stop_loss_percent}%)")
-            print(f"   🎯 Take Profit: ${position.take_profit_price:.4f} (+{position.take_profit_percent}%)")
-            print(f"   📈 Trailing: INACTIVO (activar en +{position.trailing_activation_threshold}%)")
-            print(f"   💰 Protección mínima: +0.9% (cubre comisiones Binance)")
+                # Trailing stop inicialmente inactivo (solo si es nueva posición)
+                position.trailing_stop_active = False
+                position.trailing_stop_price = None
+                position.last_trailing_update = datetime.now()
+                position.trailing_movements = 0
+
+                print(f"🛡️ Stops inicializados para {position.symbol} Pos #{position.order_id}:")
+                print(f"   📍 Entrada: ${position.entry_price:.4f}")
+                print(f"   🛑 Stop Loss: ${position.stop_loss_price:.4f} (-{position.stop_loss_percent}%)")
+                print(f"   🎯 Take Profit: ${position.take_profit_price:.4f} (+{position.take_profit_percent}%)")
+                print(f"   📈 Trailing: INACTIVO (activar en +{position.trailing_activation_threshold}%)")
+                print(f"   💰 Protección mínima: +0.9% (cubre comisiones Binance)")
+            else:
+                # Posición con estado previo restaurado
+                if position.trailing_stop_active:
+                    protection = ((position.trailing_stop_price - position.entry_price) / position.entry_price) * 100 if position.trailing_stop_price else 0
+                    print(f"🔄 Estado trailing restaurado para {position.symbol} Pos #{position.order_id}:")
+                    print(f"   📈 Trailing: ACTIVO ${position.trailing_stop_price:.4f} (+{protection:.2f}%)")
+                    print(f"   🏔️ Máximo histórico: ${position.highest_price_since_entry:.4f}")
+                    print(f"   📊 Movimientos: {position.trailing_movements}")
 
             return position
 
@@ -659,6 +714,9 @@ class ProfessionalPortfolioManager:
                     print(f"   🚀 Umbral usado: +{activation_threshold:.1f}%")
                     print(f"   💰 Protección mínima: +{min_protection*100:.1f}%")
 
+                    # ✅ NUEVO: Guardar estado después de activación
+                    self._save_trailing_state(position)
+
                 # 6. Actualizar trailing stop si está activo
                 elif position.trailing_stop_active:
                     new_trailing_price = position.highest_price_since_entry * (1 - dynamic_trailing_percent / 100)
@@ -688,6 +746,9 @@ class ProfessionalPortfolioManager:
                         print(f"   💰 Protección adaptativa: +{min_protection*100:.1f}%")
                         print(f"   📊 Movimiento #{position.trailing_movements}")
 
+                        # ✅ NUEVO: Guardar estado después de movimiento
+                        self._save_trailing_state(position)
+
                 # 7. ✅ MEJORA HÍBRIDA: Verificar si se debe cerrar por trailing stop
                 if position.trailing_stop_active and current_price <= position.trailing_stop_price:
                     final_pnl = ((position.trailing_stop_price - position.entry_price) / position.entry_price) * 100
@@ -710,6 +771,11 @@ class ProfessionalPortfolioManager:
                         print(f"   📈 Trailing dinámico usado: {dynamic_trailing_percent}%")
                         print(f"   🎯 Umbral ejecución: {min_execution_threshold:.1f}%")
                         print(f"   📊 Movimientos: {position.trailing_movements}")
+
+                        # ✅ NUEVO: Limpiar estado después de ejecución
+                        if position.order_id in self.trailing_stop_cache:
+                            del self.trailing_stop_cache[position.order_id]
+
                     else:
                         print(f"⚠️ TRAILING HÍBRIDO NO EJECUTADO - PnL insuficiente: {final_pnl:.2f}% < {min_execution_threshold:.1f}%")
 
@@ -746,6 +812,9 @@ class ProfessionalPortfolioManager:
 
                     position.last_trailing_update = datetime.now()
 
+                    # ✅ NUEVO: Guardar estado para shorts
+                    self._save_trailing_state(position)
+
                 # Actualizar trailing (solo hacia abajo para shorts)
                 elif position.trailing_stop_active:
                     new_trailing_price = position.lowest_price_since_entry * (1 + position.trailing_stop_percent / 100)
@@ -757,12 +826,19 @@ class ProfessionalPortfolioManager:
                         position.last_trailing_update = datetime.now()
                         position.trailing_movements += 1
 
+                        # ✅ NUEVO: Guardar estado después de movimiento
+                        self._save_trailing_state(position)
+
                 # Verificar cierre por trailing
                 if position.trailing_stop_active and current_price >= position.trailing_stop_price:
                     final_pnl = ((position.entry_price - position.trailing_stop_price) / position.entry_price) * 100
                     if final_pnl >= 0.9:  # Solo ejecutar si hay ganancia >= 0.9% (cubre comisiones)
                         stop_triggered = True
                         trigger_reason = "TRAILING_STOP"
+
+                        # ✅ NUEVO: Limpiar estado después de ejecución
+                        if position.order_id in self.trailing_stop_cache:
+                            del self.trailing_stop_cache[position.order_id]
 
             return position, stop_triggered, trigger_reason
 
