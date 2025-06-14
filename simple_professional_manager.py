@@ -863,55 +863,53 @@ class SimpleProfessionalTradingManager:
                         probs = prediction['probabilities']
                         print(f"  📊 Probabilidades: BUY:{probs.get('BUY', 0):.3f} | HOLD:{probs.get('HOLD', 0):.3f} | SELL:{probs.get('SELL', 0):.3f}")
 
-                    # ✅ FILTROS CRÍTICOS PARA BINANCE SPOT - CORREGIDO
+                    # ✅ FILTROS CRÍTICOS - REORDENADOS PARA MÁXIMA CLARIDAD
 
-                    # 🔧 LÓGICA CORREGIDA: Procesar señales según posiciones existentes
-                    existing_positions = self._get_positions_for_symbol(symbol)
-                    has_position = len(existing_positions) > 0
-
-                    if signal == 'BUY':
-                        if has_position:
-                            # Permitir múltiples compras si la estrategia lo define, por ahora lo simplificamos
-                            print(f"  ⏸️ Señal BUY ignorada - Ya existe(n) {len(existing_positions)} posición(es) en {symbol}")
-                            continue
-                    elif signal == 'SELL':
-                        if not has_position:
-                            print(f"  ⏸️ Señal SELL ignorada - No hay posición que vender en {symbol}")
-                            continue
-                        else:
-                            print(f"  🔥 SEÑAL SELL PROCESADA - Se cerrarán {len(existing_positions)} posición(es) en {symbol}")
-                    elif signal == 'HOLD':
-                        print(f"  ⏸️ Señal HOLD ignorada - Mantener estado actual en {symbol}")
-                        continue
-
-                    # 2. Verificar confianza mínima (configurable desde .env)
+                    # 1. Verificar confianza mínima ANTES que nada.
                     min_confidence = float(os.getenv('MIN_CONFIDENCE_THRESHOLD', '0.70'))
                     if confidence < min_confidence:
                         print(f"  ❌ Confianza insuficiente: {confidence:.1%} < {min_confidence:.1%}")
                         continue
 
-                    # 3. Verificar que no tengamos posición activa en este símbolo (doble check)
-                    if has_position and signal == 'BUY':
-                        print(f"  ⚠️ Ya existe posición activa en {symbol}")
+                    # 2. Filtrar señales de HOLD.
+                    if signal == 'HOLD':
+                        print(f"  ⏸️ Señal HOLD ignorada - Mantener estado actual en {symbol}")
                         continue
 
-                    # ✅ SEÑAL VÁLIDA - Agregar a signals (solo si balance suficiente O es SELL)
-                    balance_sufficient = self.current_balance >= self.risk_manager.limits.min_position_value_usdt
+                    # 3. Procesar señales BUY y SELL según las posiciones existentes.
+                    existing_positions = self._get_positions_for_symbol(symbol)
+                    has_position = len(existing_positions) > 0
 
-                    if signal == 'SELL' or balance_sufficient:
-                        signals[symbol] = {
-                            'signal': signal,
-                            'confidence': confidence,
-                            'current_price': current_price,
-                            'timestamp': datetime.now(),
-                            'reason': 'TCN_MODEL_PREDICTION',
-                            'available_usdt': self.current_balance,
-                            'probabilities': prediction.get('probabilities', {}),
-                            'balance_sufficient': balance_sufficient
-                        }
-                        print(f"  ✅ SEÑAL VÁLIDA: {symbol} {signal} ({confidence:.1%})")
-                    else:
-                        print(f"  📊 SEÑAL GENERADA (solo análisis): {symbol} {signal} ({confidence:.1%}) - Balance insuficiente para trade")
+                    if signal == 'BUY':
+                        if has_position:
+                            print(f"  ⏸️ Señal BUY ignorada - Ya existe(n) {len(existing_positions)} posición(es) en {symbol}")
+                            continue
+                        
+                        balance_sufficient = self.current_balance >= self.risk_manager.limits.min_position_value_usdt
+                        if not balance_sufficient:
+                            print(f"  📊 SEÑAL BUY GENERADA (solo análisis): {symbol} {signal} ({confidence:.1%}) - Balance insuficiente para trade")
+                            continue
+
+                    elif signal == 'SELL':
+                        if not has_position:
+                            print(f"  ⏸️ Señal SELL ignorada - No hay posición que vender en {symbol}")
+                            continue
+                        else:
+                            # La señal es de venta y tenemos posición. ¡Es una señal válida para procesar!
+                            print(f"  🔥 SEÑAL SELL VÁLIDA - Se cerrarán {len(existing_positions)} posición(es) en {symbol}")
+
+                    # ✅ SEÑAL VÁLIDA - Si hemos llegado hasta aquí, la señal es buena.
+                    signals[symbol] = {
+                        'signal': signal,
+                        'confidence': confidence,
+                        'current_price': current_price,
+                        'timestamp': datetime.now(),
+                        'reason': 'TCN_MODEL_PREDICTION',
+                        'available_usdt': self.current_balance,
+                        'probabilities': prediction.get('probabilities', {}),
+                        'balance_sufficient': self.current_balance >= self.risk_manager.limits.min_position_value_usdt
+                    }
+                    print(f"  ✅ SEÑAL AÑADIDA A LA COLA: {symbol} {signal} ({confidence:.1%})")
 
                 except Exception as e:
                     print(f"  ❌ Error procesando {symbol}: {e}")
@@ -981,7 +979,7 @@ class SimpleProfessionalTradingManager:
 
         if position:
             # ✅ CORREGIDO: Usar trade_id (que ahora es el order_id) como clave
-            self.active_positions[position.trade_id] = position
+            self.active_positions[position.order_id] = position
 
             # Guardar en base de datos, incluyendo el order_id de Binance
             trade_data = {
@@ -999,7 +997,7 @@ class SimpleProfessionalTradingManager:
                     'signal_reason': signal_data.get('reason'),
                     'signal_time': signal_data['timestamp'].isoformat()
                 },
-                'order_id': position.trade_id # ✅ CRÍTICO: Guardar el ID de la orden de Binance
+                'order_id': position.order_id # ✅ CRÍTICO: Guardar el ID de la orden de Binance
             }
 
             # El ID interno de la DB se genera automáticamente, no necesitamos guardarlo aquí.
@@ -1060,25 +1058,38 @@ class SimpleProfessionalTradingManager:
         if signal == 'SELL':
             print(f"🔥 Señal de VENTA para {symbol}. Cerrando {len(existing_positions)} posición(es).")
             for position in existing_positions:
-                await self._close_position(position.trade_id, "SIGNAL_SELL")
+                await self._close_position(position.order_id, "SIGNAL_SELL")
 
         # Lógica de reversión (ej. de BUY a SELL con alta confianza)
         reversal_threshold = float(os.getenv('SIGNAL_REVERSAL_THRESHOLD', '0.85'))
         if confidence > reversal_threshold:
             for position in existing_positions:
                 if (position.side == 'BUY' and signal == 'SELL') or (position.side == 'SELL' and signal == 'BUY'):
-                    await self._close_position(position.trade_id, "SIGNAL_REVERSAL")
+                    await self._close_position(position.order_id, "SIGNAL_REVERSAL")
 
     async def _close_position(self, order_id: str, reason: str):
         """📉 Cerrar posición específica por ID de orden"""
 
-        if order_id not in self.active_positions:
-            print(f"⚠️ Intento de cerrar posición con ID {order_id} no encontrada.")
+        # ✅ **LA SOLUCIÓN**: Comprobación robusta al inicio.
+        # Buscar la posición y verificar que esté activa.
+        position = self.active_positions.get(order_id)
+        if not position or not position.is_active:
+            # Si no se encuentra o ya está inactiva, es probable que ya se esté procesando.
+            print(f"ℹ️ Intento de cerrar posición {order_id} omitido. No encontrada o ya marcada para cierre.")
             return
 
-        position = self.active_positions[order_id]
+        # ✅ **CRÍTICO**: Marcar la posición como inactiva INMEDIATAMENTE.
+        # Esto previene cualquier intento de doble cierre en el mismo ciclo.
+        position.is_active = False
+        
+        print(f"👇 Iniciando cierre para {position.symbol} (ID Orden: {order_id}) por motivo: {reason}")
+
+        # Ahora el resto de la función puede proceder de forma segura.
         symbol = position.symbol
         current_price = await self.get_current_price(symbol)
+
+        # Simular ejecución de la orden de venta (en un sistema real, aquí iría la llamada a la API)
+        print(f"   💸 Ejecutando orden de VENTA simulada para {position.quantity} de {symbol} a ${current_price:.4f}")
 
         # Calcular PnL final
         if position.side == 'BUY':
@@ -1092,7 +1103,7 @@ class SimpleProfessionalTradingManager:
         self.session_pnl += pnl_usd
 
         # Actualizar en base de datos
-        if hasattr(position, 'trade_id') and position.trade_id:
+        if hasattr(position, 'position_id') and position.position_id:
             exit_data = {
                 'exit_price': current_price,
                 'exit_time': datetime.now(),
@@ -1100,10 +1111,12 @@ class SimpleProfessionalTradingManager:
                 'pnl_usd': pnl_usd,
                 'exit_reason': reason
             }
-            await self.database.update_trade_exit(position.trade_id, exit_data)
+            await self.database.update_trade_exit(position.position_id, exit_data)
 
         # Remover de posiciones activas
-        del self.active_positions[order_id]
+        # La clave es el order_id, lo que es correcto.
+        if order_id in self.active_positions:
+            del self.active_positions[order_id]
 
         # Log y notificación
         color = "🟢" if pnl_usd > 0 else "🔴"
