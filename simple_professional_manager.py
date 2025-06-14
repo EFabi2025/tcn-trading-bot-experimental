@@ -97,7 +97,8 @@ class SimpleProfessionalTradingManager:
         self.current_balance = 0.0  # Se actualizará desde Binance
         self.session_pnl = 0.0
         self.trade_count = 0
-        self.active_positions = {}
+        # ✅ CORREGIDO: Clave por order_id para múltiples posiciones por símbolo
+        self.active_positions: Dict[str, Position] = {}
         self.account_info = None
 
         # ✅ NUEVO: Portfolio tracking
@@ -174,19 +175,22 @@ class SimpleProfessionalTradingManager:
     async def get_account_info(self) -> AccountInfo:
         """💰 Obtener información completa de la cuenta de Binance"""
         try:
-            timestamp = int(time.time() * 1000)
-            params = f"timestamp={timestamp}"
-            signature = self._generate_signature(params)
+            params = {
+                'timestamp': int(time.time() * 1000),
+                'recvWindow': 10000
+            }
+            query_string = '&'.join([f"{key}={value}" for key, value in params.items()])
+            signature = self._generate_signature(query_string)
 
             headers = {
                 'X-MBX-APIKEY': self.config.api_key
             }
 
             url = f"{self.config.base_url}/api/v3/account"
-            full_params = f"{params}&signature={signature}"
+            full_url = f"{url}?{query_string}&signature={signature}"
 
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"{url}?{full_params}", headers=headers) as response:
+                async with session.get(full_url, headers=headers) as response:
                     if response.status == 200:
                         data = await response.json()
 
@@ -295,10 +299,13 @@ class SimpleProfessionalTradingManager:
             # 4. Inicializar Risk Manager
             await self._initialize_risk_manager()
 
-            # 5. Verificar conectividad
+            # ✅ 5. SINCRONIZAR POSICIONES EXISTENTES AL ARRANCAR
+            await self._sync_positions_on_startup()
+
+            # 6. Verificar conectividad
             await self._verify_connectivity()
 
-            # 6. Configurar monitoreo
+            # 7. Configurar monitoreo
             await self._setup_monitoring()
 
             self.start_time = time.time()
@@ -316,6 +323,75 @@ class SimpleProfessionalTradingManager:
             if self.database:
                 await self.database.log_event('ERROR', 'SYSTEM', f'Error inicializando: {e}')
             raise
+
+    async def _sync_positions_on_startup(self):
+        """🔄 Sincronizar estado de posiciones activas al arrancar."""
+        print("🔄 Sincronizando posiciones existentes al inicio...")
+        try:
+            # Obtener el estado real del portafolio desde el exchange
+            snapshot = await self.portfolio_manager.get_portfolio_snapshot()
+            if not snapshot or not snapshot.active_positions:
+                print("   ✅ No se encontraron posiciones activas en el exchange.")
+                return
+
+            print(f"   🔍 Encontradas {len(snapshot.active_positions)} posiciones en el exchange. Sincronizando con DB...")
+
+            # Reconstruir el estado interno de self.active_positions
+            synced_count = 0
+            for portfolio_pos in snapshot.active_positions:
+                order_id = portfolio_pos.order_id
+                if not order_id:
+                    print(f"      ⚠️ Advertencia: Posición para {portfolio_pos.symbol} no tiene ID de orden. Se omite.")
+                    continue
+
+                # Intento 1: Buscar por ID de orden (para trades nuevos y ya vinculados)
+                db_trade = await self.database.get_trade_by_order_id(order_id)
+
+                # Intento 2 (Fallback): Si no se encuentra, es un trade antiguo. Intentar vincularlo.
+                if not db_trade:
+                    print(f"      🔧 Intentando vincular trade antiguo para {portfolio_pos.symbol} con ID de orden {order_id}...")
+                    unlinked_trade = await self.database.get_last_unlinked_buy_trade(portfolio_pos.symbol)
+                    if unlinked_trade:
+                        # Vincularlo en la DB para futuras ejecuciones
+                        await self.database.update_trade_order_id(unlinked_trade['id'], order_id)
+                        # Usar este trade para la sesión actual
+                        db_trade = unlinked_trade
+                    else:
+                        print(f"      ❌ No se encontró un trade de compra sin vincular para {portfolio_pos.symbol}.")
+
+
+                if db_trade:
+                    # Reconstruir el objeto Position
+                    reconstructed_pos = Position(
+                        symbol=db_trade['symbol'],
+                        side='BUY',
+                        quantity=float(db_trade['quantity']),
+                        entry_price=float(db_trade['entry_price']),
+                        entry_time=pd.to_datetime(db_trade['entry_time']),
+                        stop_loss=float(db_trade['stop_loss']) if db_trade['stop_loss'] else None,
+                        take_profit=float(db_trade['take_profit']) if db_trade['take_profit'] else None,
+                        trade_id=db_trade['id'], # ID interno de la DB
+                        current_price=portfolio_pos.current_price,
+                        pnl_percent=portfolio_pos.unrealized_pnl_percent,
+                        pnl_usd=portfolio_pos.unrealized_pnl_usd,
+                    )
+
+                    self.active_positions[order_id] = reconstructed_pos
+                    synced_count += 1
+                    print(f"      ✅ Sincronizada posición para {reconstructed_pos.symbol} con ID de orden {order_id}.")
+                else:
+                    print(f"      ⚠️ Advertencia: Posición con ID de orden {order_id} existe en el exchange pero no se encontró un trade correspondiente en la DB.")
+
+            print(f"   👍 Sincronización completa. {synced_count} posiciones activas cargadas en el estado del bot.")
+
+        except Exception as e:
+            print(f"❌ Error fatal durante la sincronización de posiciones: {e}")
+            # Decidimos no continuar si no podemos sincronizar el estado, para evitar operaciones incorrectas.
+            raise e
+
+    def _get_positions_for_symbol(self, symbol: str) -> List[Position]:
+        """Helper: Obtiene todas las posiciones activas para un símbolo específico."""
+        return [pos for pos in self.active_positions.values() if pos.symbol == symbol]
 
     async def _initialize_database(self):
         """🗄️ Inicializar sistema de base de datos"""
@@ -790,18 +866,20 @@ class SimpleProfessionalTradingManager:
                     # ✅ FILTROS CRÍTICOS PARA BINANCE SPOT - CORREGIDO
 
                     # 🔧 LÓGICA CORREGIDA: Procesar señales según posiciones existentes
-                    has_position = symbol in self.active_positions
+                    existing_positions = self._get_positions_for_symbol(symbol)
+                    has_position = len(existing_positions) > 0
 
                     if signal == 'BUY':
                         if has_position:
-                            print(f"  ⏸️ Señal BUY ignorada - Ya existe posición en {symbol}")
+                            # Permitir múltiples compras si la estrategia lo define, por ahora lo simplificamos
+                            print(f"  ⏸️ Señal BUY ignorada - Ya existe(n) {len(existing_positions)} posición(es) en {symbol}")
                             continue
                     elif signal == 'SELL':
                         if not has_position:
                             print(f"  ⏸️ Señal SELL ignorada - No hay posición que vender en {symbol}")
                             continue
                         else:
-                            print(f"  🔥 SEÑAL SELL PROCESADA - Vendiendo posición en {symbol}")
+                            print(f"  🔥 SEÑAL SELL PROCESADA - Se cerrarán {len(existing_positions)} posición(es) en {symbol}")
                     elif signal == 'HOLD':
                         print(f"  ⏸️ Señal HOLD ignorada - Mantener estado actual en {symbol}")
                         continue
@@ -813,7 +891,7 @@ class SimpleProfessionalTradingManager:
                         continue
 
                     # 3. Verificar que no tengamos posición activa en este símbolo (doble check)
-                    if symbol in self.active_positions and signal == 'BUY':
+                    if has_position and signal == 'BUY':
                         print(f"  ⚠️ Ya existe posición activa en {symbol}")
                         continue
 
@@ -868,7 +946,7 @@ class SimpleProfessionalTradingManager:
             return
 
         # Verificar si ya tenemos posición en este símbolo
-        if symbol in self.active_positions:
+        if self._get_positions_for_symbol(symbol):
             await self._manage_existing_position(symbol, signal_data)
         else:
             await self._consider_new_position(symbol, signal_data)
@@ -902,9 +980,10 @@ class SimpleProfessionalTradingManager:
         position = await self.risk_manager.open_position(symbol, signal, confidence, current_price)
 
         if position:
-            self.active_positions[symbol] = position
+            # ✅ CORREGIDO: Usar trade_id (que ahora es el order_id) como clave
+            self.active_positions[position.trade_id] = position
 
-            # Guardar en base de datos
+            # Guardar en base de datos, incluyendo el order_id de Binance
             trade_data = {
                 'symbol': symbol,
                 'side': signal,
@@ -919,11 +998,12 @@ class SimpleProfessionalTradingManager:
                 'metadata': {
                     'signal_reason': signal_data.get('reason'),
                     'signal_time': signal_data['timestamp'].isoformat()
-                }
+                },
+                'order_id': position.trade_id # ✅ CRÍTICO: Guardar el ID de la orden de Binance
             }
 
-            trade_id = await self.database.save_trade(trade_data)
-            position.trade_id = trade_id
+            # El ID interno de la DB se genera automáticamente, no necesitamos guardarlo aquí.
+            await self.database.save_trade(trade_data)
 
             self.trade_count += 1
 
@@ -959,38 +1039,45 @@ class SimpleProfessionalTradingManager:
     async def _manage_existing_position(self, symbol: str, signal_data: Dict):
         """🔄 Gestionar posición existente"""
 
-        position = self.active_positions[symbol]
+        existing_positions = self._get_positions_for_symbol(symbol)
+        if not existing_positions:
+            return
+
         current_price = signal_data['current_price']
-
-        # Actualizar precio actual
-        position.current_price = current_price
-
-        # Calcular PnL actual
-        if position.side == 'BUY':
-            position.pnl_percent = ((current_price - position.entry_price) / position.entry_price) * 100
-        else:
-            position.pnl_percent = ((position.entry_price - current_price) / position.entry_price) * 100
-
-        position.pnl_usd = (position.pnl_percent / 100) * (position.quantity * position.entry_price)
-
-        # Si la señal cambió drásticamente, considerar cierre
         signal = signal_data['signal']
         confidence = signal_data['confidence']
 
-        # Umbral de reversión configurable desde .env
+        # Actualizar PnL de todas las posiciones para este símbolo
+        for position in existing_positions:
+            position.current_price = current_price
+            if position.side == 'BUY':
+                position.pnl_percent = ((current_price - position.entry_price) / position.entry_price) * 100
+            else: # Futuros
+                position.pnl_percent = ((position.entry_price - current_price) / position.entry_price) * 100
+            position.pnl_usd = (position.pnl_percent / 100) * (position.quantity * position.entry_price)
+
+        # Si la señal es de venta, cerrar TODAS las posiciones para este símbolo
+        if signal == 'SELL':
+            print(f"🔥 Señal de VENTA para {symbol}. Cerrando {len(existing_positions)} posición(es).")
+            for position in existing_positions:
+                await self._close_position(position.trade_id, "SIGNAL_SELL")
+
+        # Lógica de reversión (ej. de BUY a SELL con alta confianza)
         reversal_threshold = float(os.getenv('SIGNAL_REVERSAL_THRESHOLD', '0.85'))
-        if ((position.side == 'BUY' and signal == 'SELL') or
-            (position.side == 'SELL' and signal == 'BUY')) and confidence > reversal_threshold:
+        if confidence > reversal_threshold:
+            for position in existing_positions:
+                if (position.side == 'BUY' and signal == 'SELL') or (position.side == 'SELL' and signal == 'BUY'):
+                    await self._close_position(position.trade_id, "SIGNAL_REVERSAL")
 
-            await self._close_position(symbol, "SIGNAL_REVERSAL")
+    async def _close_position(self, order_id: str, reason: str):
+        """📉 Cerrar posición específica por ID de orden"""
 
-    async def _close_position(self, symbol: str, reason: str):
-        """📉 Cerrar posición específica"""
-
-        if symbol not in self.active_positions:
+        if order_id not in self.active_positions:
+            print(f"⚠️ Intento de cerrar posición con ID {order_id} no encontrada.")
             return
 
-        position = self.active_positions[symbol]
+        position = self.active_positions[order_id]
+        symbol = position.symbol
         current_price = await self.get_current_price(symbol)
 
         # Calcular PnL final
@@ -1016,7 +1103,7 @@ class SimpleProfessionalTradingManager:
             await self.database.update_trade_exit(position.trade_id, exit_data)
 
         # Remover de posiciones activas
-        del self.active_positions[symbol]
+        del self.active_positions[order_id]
 
         # Log y notificación
         color = "🟢" if pnl_usd > 0 else "🔴"
@@ -1031,7 +1118,7 @@ class SimpleProfessionalTradingManager:
                                              f"📈 PnL: {pnl_percent:.2f}% (${pnl_usd:.2f})\n"
                                              f"🔄 Razón: {reason}")
 
-        print(f"📉 Posición cerrada: {symbol} - PnL: {pnl_percent:.2f}% (${pnl_usd:.2f})")
+        print(f"📉 Posición cerrada: {symbol} (ID de orden: {order_id}) - PnL: {pnl_percent:.2f}% (${pnl_usd:.2f})")
 
     async def _check_portfolio_diversification_before_trade(self, symbol: str, signal_data: Dict):
         """🎯 Verificar diversificación antes de ejecutar trade"""
@@ -1341,7 +1428,8 @@ class SimpleProfessionalTradingManager:
                 'side': close_side,
                 'type': 'MARKET',  # Orden de mercado para cierre inmediato
                 'quantity': f"{adjusted_quantity:.8f}".rstrip('0').rstrip('.'),
-                'timestamp': timestamp
+                'timestamp': timestamp,
+                'recvWindow': 10000
             }
 
             # Crear signature
@@ -1609,8 +1697,8 @@ class SimpleProfessionalTradingManager:
         self.status = TradingManagerStatus.EMERGENCY_STOP
 
         # Cerrar todas las posiciones activas
-        for symbol in list(self.active_positions.keys()):
-            await self._close_position(symbol, "EMERGENCY_STOP")
+        for order_id in list(self.active_positions.keys()):
+            await self._close_position(order_id, "EMERGENCY_STOP")
 
         await self.database.log_event('CRITICAL', 'SYSTEM', 'Parada de emergencia activada')
         print("🚨 PARADA DE EMERGENCIA ACTIVADA")
@@ -1665,8 +1753,8 @@ class SimpleProfessionalTradingManager:
         # Cerrar posiciones si hay alguna activa
         if self.active_positions:
             print(f"📉 Cerrando {len(self.active_positions)} posiciones activas...")
-            for symbol in list(self.active_positions.keys()):
-                await self._close_position(symbol, "SYSTEM_SHUTDOWN")
+            for order_id in list(self.active_positions.keys()):
+                await self._close_position(order_id, "SYSTEM_SHUTDOWN")
 
         # Guardar métricas finales
         await self._save_periodic_metrics()

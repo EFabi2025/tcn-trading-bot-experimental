@@ -9,7 +9,7 @@ import time
 import hmac
 import hashlib
 import math
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_DOWN
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
@@ -34,6 +34,7 @@ class Position:
     trailing_stop: Optional[float] = None
     pnl_percent: float = 0.0
     pnl_usd: float = 0.0
+    trade_id: str = ""
 
 @dataclass
 class RiskLimits:
@@ -80,6 +81,8 @@ class AdvancedRiskManager:
             'largest_win': 0.0,
             'largest_loss': 0.0
         }
+
+        print("✅ Risk Manager configurado")
 
     def _load_risk_limits_from_env(self) -> RiskLimits:
         """🔧 Cargar límites de riesgo desde variables de entorno"""
@@ -431,133 +434,81 @@ class AdvancedRiskManager:
             pass
         return 0.0
 
-    async def open_position(self, symbol: str, signal: str, confidence: float, price: float) -> Optional[Position]:
-        """📈 Abrir nueva posición con gestión de riesgo"""
-
-        # Verificar límites de riesgo
-        can_trade, reason = await self.check_risk_limits_before_trade(symbol, signal, confidence)
-        if not can_trade:
-            print(f"❌ Trade rechazado: {reason}")
-            return None
-
-        # Calcular tamaño de posición
-        quantity = self.calculate_position_size(symbol, confidence, price)
-
-        # ⚠️ VALIDACIÓN CRÍTICA: Si quantity = 0, cancelar operación
-        if quantity <= 0.0:
-            print(f"❌ Operación cancelada: Balance insuficiente para {symbol}")
-            print(f"   📊 Cantidad calculada: {quantity}")
-            print(f"   💰 Balance disponible: ${self.current_balance:.2f}")
-            print(f"   💎 Mínimo requerido: ${self.limits.min_position_value_usdt:.2f}")
-            return None
-
-        # 🚀 EJECUTAR ORDEN REAL EN BINANCE
+    async def open_position(self, symbol: str, side: str, confidence: float, current_price: float) -> Optional[Position]:
+        """📈 Abrir nueva posición con ejecución real en Binance."""
         try:
-            order_result = await self._execute_real_binance_order(symbol, signal, quantity, price)
-            if not order_result:
-                print(f"❌ Error ejecutando orden real en Binance para {symbol}")
+            # Calcular tamaño de la posición
+            position_size_usd = self.calculate_position_size(symbol, confidence, current_price)
+            quantity = position_size_usd / current_price
+
+            # ✅ NUEVO: Ejecutar orden de compra real en Binance
+            order_result = await self._execute_real_order(symbol, side, quantity)
+
+            if not order_result or 'orderId' not in order_result:
+                print(f"❌ Falló la ejecución de la orden real para {symbol}. No se abre posición.")
                 return None
 
-            # Crear posición con datos reales de Binance
+            real_entry_price = float(order_result.get('fills', [{}])[0].get('price', current_price))
+            real_quantity = float(order_result.get('executedQty', quantity))
+            order_id = str(order_result['orderId'])
+
+            print(f"🎉 Orden real ejecutada para {symbol}: ID {order_id}")
+            print(f"   - Precio Real: ${real_entry_price:.4f}, Cantidad Real: {real_quantity:.6f}")
+
+            # Crear y registrar la posición
             position = Position(
                 symbol=symbol,
-                side=signal,
-                quantity=float(order_result['executedQty']),
-                entry_price=float(order_result['fills'][0]['price']),  # Precio real de ejecución
-                current_price=float(order_result['fills'][0]['price']),
-                entry_time=datetime.now()
+                side=side,
+                quantity=real_quantity,
+                entry_price=real_entry_price,
+                entry_time=datetime.now(timezone.utc),
+                stop_loss=real_entry_price * (1 - self.limits.stop_loss_percent / 100),
+                take_profit=real_entry_price * (1 + self.limits.take_profit_percent / 100),
+                trade_id=order_id # Usamos el ID de la orden de Binance
             )
 
-            # Configurar Stop Loss y Take Profit
-            position = self.set_stop_loss_take_profit(position)
-
-            # Guardar posición activa
-            self.active_positions[symbol] = position
-
-            print(f"✅ ORDEN REAL EJECUTADA: {signal} {symbol}")
-            print(f"   🆔 Order ID: {order_result['orderId']}")
-            print(f"   💵 Cantidad ejecutada: {position.quantity:.6f}")
-            print(f"   💲 Precio real: ${position.entry_price:.4f}")
-            print(f"   🎯 Confianza: {confidence:.1%}")
+            self.active_positions[order_id] = position
+            await self.update_balance(self.current_balance - (real_quantity * real_entry_price))
 
             return position
 
         except Exception as e:
-            print(f"❌ ERROR CRÍTICO ejecutando orden real: {e}")
+            print(f"❌ Error abriendo posición para {symbol}: {e}")
             return None
 
-    async def _execute_real_binance_order(self, symbol: str, side: str, quantity: float, price: float) -> Optional[Dict]:
-        """🔥 EJECUTAR ORDEN REAL EN BINANCE"""
-
+    async def _execute_real_order(self, symbol: str, side: str, quantity: float) -> Optional[Dict]:
+        """🔥 Ejecutar una orden real en Binance."""
         try:
-            # 🔧 OBTENER FILTROS DEL SÍMBOLO
-            filters = await self._get_symbol_filters(symbol)
-
-            if 'LOT_SIZE' in filters:
-                # Ajustar cantidad según filtros LOT_SIZE
-                original_qty = quantity
-                quantity = self._adjust_quantity_to_lot_size(quantity, filters['LOT_SIZE'])
-
-                print(f"🔧 Cantidad ajustada para {symbol}:")
-                print(f"   📊 Original: {original_qty:.8f}")
-                print(f"   ✅ Ajustada: {quantity:.8f}")
-                print(f"   📏 Step Size: {filters['LOT_SIZE']['stepSize']}")
-                print(f"   📉 Min Qty: {filters['LOT_SIZE']['minQty']}")
-
-            # Verificar MIN_NOTIONAL si existe
-            if 'MIN_NOTIONAL' in filters:
-                notional_value = quantity * price
-                min_notional = filters['MIN_NOTIONAL']['minNotional']
-
-                if notional_value < min_notional:
-                    print(f"❌ Valor notional {notional_value:.2f} < mínimo {min_notional:.2f}")
-                    return None
-
-            # Preparar parámetros de orden
             timestamp = int(time.time() * 1000)
 
+            # TODO: Ajustar cantidad a los filtros del símbolo (stepSize, minQty)
             params = {
                 'symbol': symbol,
-                'side': side,  # 'BUY' or 'SELL'
-                'type': 'MARKET',  # Orden de mercado para ejecución inmediata
-                'quantity': f"{quantity:.8f}".rstrip('0').rstrip('.'),  # Formato optimizado
-                'timestamp': timestamp
+                'side': side.upper(),
+                'type': 'MARKET',
+                'quantity': f"{quantity:.8f}".rstrip('0').rstrip('.'),
+                'timestamp': timestamp,
+                'recvWindow': 10000 # Aumentar la ventana a 10 segundos
             }
 
-            # Crear signature para autenticación
-            query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
-            signature = hmac.new(
-                self.config.secret_key.encode('utf-8'),
-                query_string.encode('utf-8'),
-                hashlib.sha256
-            ).hexdigest()
-
+            query_string = '&'.join([f"{k}={v}" for k,v in params.items()])
+            signature = hmac.new(self.config.secret_key.encode('utf-8'), query_string.encode('utf-8'), hashlib.sha256).hexdigest()
             params['signature'] = signature
 
-            # Headers de autenticación
-            headers = {
-                'X-MBX-APIKEY': self.config.api_key,
-                'Content-Type': 'application/x-www-form-urlencoded'
-            }
+            headers = {'X-MBX-APIKEY': self.config.api_key}
+            url = f"{self.config.base_url}/api/v3/order"
 
-            print(f"📡 Enviando orden: {side} {params['quantity']} {symbol}")
-
-            # Ejecutar orden POST /api/v3/order
             async with aiohttp.ClientSession() as session:
-                url = f"{self.config.base_url}/api/v3/order"
-
-                async with session.post(url, data=params, headers=headers) as response:
+                async with session.post(url, headers=headers, data=params) as response:
                     if response.status == 200:
-                        result = await response.json()
-                        print(f"🎉 ORDEN EJECUTADA EXITOSAMENTE: {result['orderId']}")
-                        return result
+                        data = await response.json()
+                        return data
                     else:
                         error_text = await response.text()
-                        print(f"❌ Error Binance API: {response.status} - {error_text}")
+                        print(f"❌ Error en la API de Binance al crear orden: {response.status} - {error_text}")
                         return None
-
         except Exception as e:
-            print(f"❌ ERROR ejecutando orden Binance: {e}")
+            print(f"❌ Excepción al ejecutar orden real: {e}")
             return None
 
     async def close_position(self, symbol: str, reason: str) -> Optional[Dict]:
@@ -574,8 +525,8 @@ class AdvancedRiskManager:
             # Para cerrar posición BUY, necesitamos hacer SELL
             close_side = 'SELL' if position.side == 'BUY' else 'BUY'
 
-            close_order = await self._execute_real_binance_order(
-                symbol, close_side, position.quantity, current_price
+            close_order = await self._execute_real_order(
+                symbol, close_side, position.quantity
             )
 
             if not close_order:
