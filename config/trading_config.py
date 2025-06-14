@@ -63,9 +63,10 @@ class TradingConfig:
             'BTCUSDT': 'MAJOR_CRYPTO',
             'ETHUSDT': 'MAJOR_CRYPTO',
             'BNBUSDT': 'EXCHANGE_TOKEN',
-            'ADAUSDT': 'ALT_CRYPTO',
-            'DOTUSDT': 'ALT_CRYPTO',
-            'SOLUSDT': 'ALT_CRYPTO'
+            # ⏸️ TEMPORALMENTE EXCLUIDOS (sin modelos TCN):
+            # 'ADAUSDT': 'ALT_CRYPTO',
+            # 'DOTUSDT': 'ALT_CRYPTO',
+            # 'SOLUSDT': 'ALT_CRYPTO'
         },
         'MAX_CATEGORY_CONCENTRATION_PERCENT': 90.0,  # Máximo 60% en una categoría
 

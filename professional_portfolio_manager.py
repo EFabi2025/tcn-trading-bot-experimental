@@ -92,19 +92,39 @@ class PortfolioSnapshot:
     total_trades_today: int
 
 class ProfessionalPortfolioManager:
-    """💼 Gestor Profesional de Portafolio"""
+    """🏛️ Gestor profesional de portafolio con TCN y trailing stops avanzados"""
 
     def __init__(self, api_key: str, secret_key: str, base_url: str = "https://testnet.binance.vision"):
-        """🚀 Inicializar Portfolio Manager"""
         self.api_key = api_key
         self.secret_key = secret_key
-        self.base_url = base_url.rstrip('/')
-        self.session = None
+        self.base_url = base_url
+        self.session = aiohttp.ClientSession()
+
+        # ✅ NUEVO: Registry persistente de posiciones
+        self.position_registry: Dict[str, Position] = {}  # order_id -> Position
+        self.last_orders_hash: Optional[str] = None  # Para detectar cambios en órdenes
+
+        # Configuración
+        self.max_positions = 10
+        self.min_position_value = 5.0  # Mínimo $5 USD por posición
+        self.days_to_lookback = 30  # Días hacia atrás para historial
+
+        # Cache de precios
         self.price_cache = {}
         self.last_price_update = {}
 
-        # ✅ NUEVO: Cache para persistir estado del trailing stop
-        self.trailing_stop_cache = {}  # {position_id: trailing_state}
+        # Cache de trailing stops - ✅ MEJORADO: Más robusto
+        self.trailing_cache_file = "trailing_stops_cache.json"
+        self.trailing_cache = self._load_trailing_cache()
+
+        # Timestamps
+        self.last_snapshot_time = None
+
+        print(f"✅ ProfessionalPortfolioManager inicializado")
+        print(f"   📊 Max posiciones: {self.max_positions}")
+        print(f"   💰 Valor mínimo por posición: ${self.min_position_value}")
+        print(f"   📅 Días de historial: {self.days_to_lookback}")
+        print(f"   🗂️ Registry de posiciones: Inicializado")
 
         # Configuración de timeouts y límites
         self.request_timeout = 10
@@ -119,13 +139,6 @@ class ProfessionalPortfolioManager:
         # ✅ NUEVO: Cache de órdenes para tracking de posiciones
         self.orders_cache = {}
         self.last_orders_update = None
-
-        # Configuración
-        self.max_positions = 5
-        self.min_position_value = 10.0  # USD mínimo por posición
-
-        # ✅ NUEVO: Configuración para historial de órdenes
-        self.days_to_lookback = 30  # Días hacia atrás para buscar órdenes
 
     def _generate_signature(self, params: str) -> str:
         """🔐 Generar firma HMAC SHA256 para Binance"""
@@ -364,7 +377,7 @@ class ProfessionalPortfolioManager:
             return []
 
     async def get_portfolio_snapshot(self) -> PortfolioSnapshot:
-        """📊 Obtener snapshot completo del portafolio"""
+        """📊 Obtener snapshot completo del portafolio - ✅ MEJORADO: Con persistencia de posiciones"""
         try:
             print("📊 Obteniendo snapshot del portafolio...")
 
@@ -385,17 +398,24 @@ class ProfessionalPortfolioManager:
             else:
                 prices = {}
 
-            # 4. ✅ NUEVO: Obtener historial de órdenes para posiciones reales
+            # 4. ✅ NUEVO: Obtener historial de órdenes
             print("📋 Obteniendo historial de órdenes...")
             all_orders = await self.get_order_history(days_back=self.days_to_lookback)
             print(f"   📄 Encontradas {len(all_orders)} órdenes ejecutadas")
 
-            # 5. ✅ NUEVO: Agrupar órdenes en posiciones individuales
-            print("🔄 Agrupando órdenes en posiciones...")
-            individual_positions = self.group_orders_into_positions(all_orders, balances)
-            print(f"   📈 Identificadas {len(individual_positions)} posiciones individuales")
+            # 5. ✅ MEJORADO: Sincronizar registry con órdenes (solo si hay cambios)
+            orders_hash = self._calculate_orders_hash(all_orders)
+            if orders_hash != self.last_orders_hash:
+                print("🔄 Detectados cambios en órdenes, sincronizando registry...")
+                self.sync_positions_with_orders(all_orders, balances)
+                self.last_orders_hash = orders_hash
+            else:
+                print("✅ Sin cambios en órdenes, usando registry existente")
 
-            # 6. Calcular valor de cada activo
+            # 6. ✅ NUEVO: Actualizar precios y PnL de posiciones existentes
+            await self.update_existing_positions_prices(prices)
+
+            # 7. Calcular valor de cada activo
             all_assets = []
             total_portfolio_value = 0.0
             free_usdt = balances.get('USDT', {}).get('free', 0.0)
@@ -421,18 +441,18 @@ class ProfessionalPortfolioManager:
                     )
                     all_assets.append(asset_obj)
 
-            # 7. Calcular porcentajes
+            # 8. Calcular porcentajes
             for asset in all_assets:
                 asset.percentage_of_portfolio = (asset.usd_value / total_portfolio_value * 100) if total_portfolio_value > 0 else 0.0
 
-            # 8. ✅ NUEVO: Filtrar posiciones por valor mínimo
-            active_positions = [pos for pos in individual_positions
+            # 9. ✅ MEJORADO: Usar posiciones del registry (con trailing stops preservados)
+            active_positions = [pos for pos in self.position_registry.values()
                              if pos.market_value >= self.min_position_value]
 
-            # 9. Calcular PnL total
+            # 10. Calcular PnL total
             total_unrealized_pnl = sum(pos.unrealized_pnl_usd for pos in active_positions)
 
-            # 10. Crear snapshot
+            # 11. Crear snapshot
             snapshot = PortfolioSnapshot(
                 timestamp=datetime.now(),
                 total_balance_usd=total_portfolio_value,
@@ -447,7 +467,7 @@ class ProfessionalPortfolioManager:
             )
 
             self.last_snapshot_time = datetime.now()
-            print(f"✅ Snapshot obtenido: {len(all_assets)} activos, {len(active_positions)} posiciones individuales")
+            print(f"✅ Snapshot obtenido: {len(all_assets)} activos, {len(active_positions)} posiciones del registry")
 
             return snapshot
 
@@ -577,7 +597,7 @@ class ProfessionalPortfolioManager:
         """💾 Guardar estado del trailing stop en cache"""
         try:
             if position.order_id:
-                self.trailing_stop_cache[position.order_id] = {
+                self.trailing_cache[position.order_id] = {
                     'trailing_stop_active': position.trailing_stop_active,
                     'trailing_stop_price': position.trailing_stop_price,
                     'highest_price_since_entry': position.highest_price_since_entry,
@@ -585,7 +605,7 @@ class ProfessionalPortfolioManager:
                     'trailing_movements': position.trailing_movements,
                     'last_trailing_update': position.last_trailing_update
                 }
-                
+
                 # ✅ NUEVO: Logging detallado para debugging
                 if position.trailing_stop_active:
                     protection = ((position.trailing_stop_price - position.entry_price) / position.entry_price) * 100 if position.trailing_stop_price else 0
@@ -597,15 +617,15 @@ class ProfessionalPortfolioManager:
                     print(f"💾 TRAILING GUARDADO {position.symbol} Pos #{position.order_id}: INACTIVO")
             else:
                 print(f"⚠️ No se puede guardar trailing para {position.symbol}: Sin order_id")
-                
+
         except Exception as e:
             print(f"❌ Error guardando estado trailing para {position.symbol}: {e}")
 
     def _restore_trailing_state(self, position: Position) -> Position:
         """🔄 Restaurar estado del trailing stop desde cache"""
         try:
-            if position.order_id and position.order_id in self.trailing_stop_cache:
-                cached_state = self.trailing_stop_cache[position.order_id]
+            if position.order_id and position.order_id in self.trailing_cache:
+                cached_state = self.trailing_cache[position.order_id]
 
                 # Restaurar estado
                 position.trailing_stop_active = cached_state.get('trailing_stop_active', False)
@@ -821,8 +841,8 @@ class ProfessionalPortfolioManager:
                         print(f"   📊 Movimientos: {position.trailing_movements}")
 
                         # ✅ NUEVO: Limpiar estado después de ejecución
-                        if position.order_id in self.trailing_stop_cache:
-                            del self.trailing_stop_cache[position.order_id]
+                        if position.order_id in self.trailing_cache:
+                            del self.trailing_cache[position.order_id]
 
                     else:
                         print(f"⚠️ TRAILING HÍBRIDO NO EJECUTADO - PnL insuficiente: {final_pnl:.2f}% < {min_execution_threshold:.1f}%")
@@ -885,8 +905,8 @@ class ProfessionalPortfolioManager:
                         trigger_reason = "TRAILING_STOP"
 
                         # ✅ NUEVO: Limpiar estado después de ejecución
-                        if position.order_id in self.trailing_stop_cache:
-                            del self.trailing_stop_cache[position.order_id]
+                        if position.order_id in self.trailing_cache:
+                            del self.trailing_cache[position.order_id]
 
             return position, stop_triggered, trigger_reason
 
@@ -925,23 +945,23 @@ class ProfessionalPortfolioManager:
     def debug_trailing_cache(self):
         """🔍 Mostrar estado actual del cache de trailing stops para debugging"""
         try:
-            print(f"\n🔍 DEBUG TRAILING CACHE ({len(self.trailing_stop_cache)} entradas):")
-            
-            if not self.trailing_stop_cache:
+            print(f"\n🔍 DEBUG TRAILING CACHE ({len(self.trailing_cache)} entradas):")
+
+            if not self.trailing_cache:
                 print("   📭 Cache vacío - No hay trailing stops guardados")
                 return
-                
-            for order_id, state in self.trailing_stop_cache.items():
+
+            for order_id, state in self.trailing_cache.items():
                 active = state.get('trailing_stop_active', False)
                 price = state.get('trailing_stop_price', 0)
                 movements = state.get('trailing_movements', 0)
-                
+
                 status = "ACTIVO" if active else "INACTIVO"
                 print(f"   📋 {order_id}: {status}")
                 if active:
                     print(f"      💰 Precio: ${price:.4f}")
                     print(f"      📊 Movimientos: {movements}")
-                    
+
         except Exception as e:
             print(f"❌ Error en debug trailing cache: {e}")
 
@@ -985,6 +1005,123 @@ class ProfessionalPortfolioManager:
         except Exception as e:
             print(f"❌ Error generando reporte trailing: {e}")
             return "❌ Error en reporte trailing stops"
+
+    def _load_trailing_cache(self):
+        """💾 Cargar estado del trailing stop desde archivo"""
+        try:
+            if os.path.exists(self.trailing_cache_file):
+                with open(self.trailing_cache_file, 'r') as f:
+                    return json.load(f)
+            else:
+                return {}
+        except Exception as e:
+            print(f"❌ Error cargando trailing cache: {e}")
+            return {}
+
+    def _save_trailing_cache(self):
+        """💾 Guardar estado del trailing stop en archivo"""
+        try:
+            with open(self.trailing_cache_file, 'w') as f:
+                json.dump(self.trailing_cache, f)
+        except Exception as e:
+            print(f"❌ Error guardando trailing cache: {e}")
+
+    def _calculate_orders_hash(self, orders: List[TradeOrder]) -> str:
+        """🔢 Calcular hash de órdenes para detectar cambios"""
+        try:
+            # Crear string único basado en órdenes
+            orders_str = ""
+            for order in sorted(orders, key=lambda x: x.order_id):
+                orders_str += f"{order.order_id}_{order.executed_qty}_{order.time.isoformat()}"
+
+            import hashlib
+            return hashlib.md5(orders_str.encode()).hexdigest()
+        except Exception as e:
+            print(f"❌ Error calculando hash de órdenes: {e}")
+            return ""
+
+    def sync_positions_with_orders(self, orders: List[TradeOrder], balances: Dict[str, Dict]):
+        """🔄 Sincronizar registry de posiciones con órdenes (solo cambios)"""
+        try:
+            print("🔄 Sincronizando posiciones con órdenes...")
+
+            # 1. Crear posiciones nuevas basadas en órdenes
+            new_positions = self.group_orders_into_positions(orders, balances)
+
+            # 2. Crear diccionario de nuevas posiciones por order_id
+            new_positions_dict = {pos.order_id: pos for pos in new_positions}
+
+            # 3. Identificar posiciones que ya no existen (vendidas completamente)
+            positions_to_remove = []
+            for order_id in self.position_registry.keys():
+                if order_id not in new_positions_dict:
+                    positions_to_remove.append(order_id)
+                    print(f"🗑️ Posición eliminada: {order_id} (vendida completamente)")
+
+            # 4. Eliminar posiciones que ya no existen
+            for order_id in positions_to_remove:
+                del self.position_registry[order_id]
+                # También limpiar cache de trailing
+                if order_id in self.trailing_cache:
+                    del self.trailing_cache[order_id]
+
+            # 5. Agregar/actualizar posiciones
+            for order_id, new_position in new_positions_dict.items():
+                if order_id in self.position_registry:
+                    # Posición existente: preservar trailing stops, actualizar datos básicos
+                    existing_position = self.position_registry[order_id]
+
+                    # Preservar estado de trailing stops
+                    new_position.trailing_stop_active = existing_position.trailing_stop_active
+                    new_position.trailing_stop_price = existing_position.trailing_stop_price
+                    new_position.trailing_stop_percent = existing_position.trailing_stop_percent
+                    new_position.highest_price_since_entry = existing_position.highest_price_since_entry
+                    new_position.lowest_price_since_entry = existing_position.lowest_price_since_entry
+                    new_position.trailing_activation_threshold = existing_position.trailing_activation_threshold
+                    new_position.last_trailing_update = existing_position.last_trailing_update
+                    new_position.trailing_movements = existing_position.trailing_movements
+
+                    # Preservar stops tradicionales
+                    new_position.stop_loss_price = existing_position.stop_loss_price
+                    new_position.take_profit_price = existing_position.take_profit_price
+                    new_position.stop_loss_percent = existing_position.stop_loss_percent
+                    new_position.take_profit_percent = existing_position.take_profit_percent
+
+                    print(f"🔄 Posición actualizada: {order_id} (trailing preservado: {new_position.trailing_stop_active})")
+                else:
+                    # Posición nueva: inicializar stops
+                    new_position = self.initialize_position_stops(new_position)
+                    print(f"🆕 Nueva posición: {order_id}")
+
+                # Actualizar registry
+                self.position_registry[order_id] = new_position
+
+            print(f"✅ Registry sincronizado: {len(self.position_registry)} posiciones activas")
+
+        except Exception as e:
+            print(f"❌ Error sincronizando posiciones: {e}")
+
+    async def update_existing_positions_prices(self, prices: Dict[str, float]):
+        """💰 Actualizar precios y PnL de posiciones existentes en el registry"""
+        try:
+            for order_id, position in self.position_registry.items():
+                # Obtener precio actual
+                current_price = prices.get(position.symbol, position.current_price)
+
+                # Actualizar precio y valores
+                position.current_price = current_price
+                position.market_value = position.size * current_price
+
+                # Recalcular PnL
+                entry_value = position.size * position.entry_price
+                position.unrealized_pnl_usd = position.market_value - entry_value
+                position.unrealized_pnl_percent = (position.unrealized_pnl_usd / entry_value) * 100 if entry_value > 0 else 0
+
+                # Actualizar duración
+                position.duration_minutes = int((datetime.now() - position.entry_time).total_seconds() / 60)
+
+        except Exception as e:
+            print(f"❌ Error actualizando precios de posiciones: {e}")
 
 async def test_portfolio_manager():
     """🧪 Probar Portfolio Manager"""

@@ -32,7 +32,11 @@ class TCNDefinitivoPredictor:
         self.scalers = {}
         self.feature_columns = {}
         self.class_weights = {}
+        # ✅ Solo pares con modelos entrenados disponibles
         self.symbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']
+
+        # ⚠️ PARES PENDIENTES (sin modelos): ['ADAUSDT', 'DOTUSDT', 'SOLUSDT']
+        self.excluded_symbols = ['ADAUSDT', 'DOTUSDT', 'SOLUSDT']
         self.model_stats = {
             'BTCUSDT': {'accuracy': 0.597, 'loss': 0.835},
             'ETHUSDT': {'accuracy': 0.600, 'loss': 0.840},  # Estimado

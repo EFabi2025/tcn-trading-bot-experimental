@@ -68,8 +68,17 @@ class SimpleProfessionalTradingManager:
 
         # Configuración básica
         self.config = self._load_config()
-        # ✅ NUEVO: Más símbolos para mejor diversificación
-        self.symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "ADAUSDT", "DOTUSDT", "SOLUSDT"]
+
+        # ✅ CORREGIDO: Solo pares con modelos TCN disponibles
+        # Excluir temporalmente ADAUSDT, DOTUSDT, SOLUSDT hasta entrenar modelos
+        self.symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT"]
+
+        # ⚠️ PARES PENDIENTES (sin modelos): ["ADAUSDT", "DOTUSDT", "SOLUSDT"]
+        self.excluded_symbols = ["ADAUSDT", "DOTUSDT", "SOLUSDT"]
+
+        print(f"📊 Pares activos: {self.symbols}")
+        print(f"⏸️ Pares excluidos (sin modelos): {self.excluded_symbols}")
+
         self.check_interval = 60  # 1 minuto
 
         # Estado del sistema
