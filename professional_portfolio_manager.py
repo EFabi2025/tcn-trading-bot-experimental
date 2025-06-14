@@ -348,7 +348,7 @@ class ProfessionalPortfolioManager:
                             unrealized_pnl_percent=pnl_percent,
                             entry_time=buy_order.time,
                             duration_minutes=duration_minutes,
-                            order_id=f"{len(orders)}ord_{buy_order.order_id}",  # ID único para la posición
+                            order_id=f"pos_{buy_order.order_id}",  # ✅ CORREGIDO: ID estable basado en order_id original
                             batch_id=buy_order.order_id
                         )
 
@@ -585,6 +585,19 @@ class ProfessionalPortfolioManager:
                     'trailing_movements': position.trailing_movements,
                     'last_trailing_update': position.last_trailing_update
                 }
+                
+                # ✅ NUEVO: Logging detallado para debugging
+                if position.trailing_stop_active:
+                    protection = ((position.trailing_stop_price - position.entry_price) / position.entry_price) * 100 if position.trailing_stop_price else 0
+                    print(f"💾 TRAILING GUARDADO {position.symbol} Pos #{position.order_id}:")
+                    print(f"   📈 Estado: ACTIVO ${position.trailing_stop_price:.4f} (+{protection:.2f}%)")
+                    print(f"   🏔️ Máximo: ${position.highest_price_since_entry:.4f}")
+                    print(f"   📊 Movimientos: {position.trailing_movements}")
+                else:
+                    print(f"💾 TRAILING GUARDADO {position.symbol} Pos #{position.order_id}: INACTIVO")
+            else:
+                print(f"⚠️ No se puede guardar trailing para {position.symbol}: Sin order_id")
+                
         except Exception as e:
             print(f"❌ Error guardando estado trailing para {position.symbol}: {e}")
 
@@ -594,6 +607,7 @@ class ProfessionalPortfolioManager:
             if position.order_id and position.order_id in self.trailing_stop_cache:
                 cached_state = self.trailing_stop_cache[position.order_id]
 
+                # Restaurar estado
                 position.trailing_stop_active = cached_state.get('trailing_stop_active', False)
                 position.trailing_stop_price = cached_state.get('trailing_stop_price', None)
                 position.highest_price_since_entry = cached_state.get('highest_price_since_entry', position.entry_price)
@@ -601,7 +615,24 @@ class ProfessionalPortfolioManager:
                 position.trailing_movements = cached_state.get('trailing_movements', 0)
                 position.last_trailing_update = cached_state.get('last_trailing_update', None)
 
+                # ✅ NUEVO: Logging detallado para debugging
+                if position.trailing_stop_active:
+                    protection = ((position.trailing_stop_price - position.entry_price) / position.entry_price) * 100 if position.trailing_stop_price else 0
+                    print(f"🔄 TRAILING RESTAURADO {position.symbol} Pos #{position.order_id}:")
+                    print(f"   📈 Estado: ACTIVO ${position.trailing_stop_price:.4f} (+{protection:.2f}%)")
+                    print(f"   🏔️ Máximo histórico: ${position.highest_price_since_entry:.4f}")
+                    print(f"   📊 Movimientos: {position.trailing_movements}")
+                else:
+                    print(f"🔄 TRAILING RESTAURADO {position.symbol} Pos #{position.order_id}: INACTIVO")
+
                 return position
+            else:
+                # ✅ NUEVO: Logging cuando no hay estado previo
+                if position.order_id:
+                    print(f"🆕 NUEVA POSICIÓN {position.symbol} Pos #{position.order_id}: Sin estado trailing previo")
+                else:
+                    print(f"⚠️ POSICIÓN SIN ID {position.symbol}: No se puede restaurar trailing")
+
         except Exception as e:
             print(f"❌ Error restaurando estado trailing para {position.symbol}: {e}")
 
@@ -890,6 +921,29 @@ class ProfessionalPortfolioManager:
         except Exception as e:
             print(f"❌ Error calculando ATR para {symbol}: {e}")
             return 2.0  # Default fallback
+
+    def debug_trailing_cache(self):
+        """🔍 Mostrar estado actual del cache de trailing stops para debugging"""
+        try:
+            print(f"\n🔍 DEBUG TRAILING CACHE ({len(self.trailing_stop_cache)} entradas):")
+            
+            if not self.trailing_stop_cache:
+                print("   📭 Cache vacío - No hay trailing stops guardados")
+                return
+                
+            for order_id, state in self.trailing_stop_cache.items():
+                active = state.get('trailing_stop_active', False)
+                price = state.get('trailing_stop_price', 0)
+                movements = state.get('trailing_movements', 0)
+                
+                status = "ACTIVO" if active else "INACTIVO"
+                print(f"   📋 {order_id}: {status}")
+                if active:
+                    print(f"      💰 Precio: ${price:.4f}")
+                    print(f"      📊 Movimientos: {movements}")
+                    
+        except Exception as e:
+            print(f"❌ Error en debug trailing cache: {e}")
 
     def generate_trailing_stop_report(self, positions: List[Position]) -> str:
         """📊 Generar reporte detallado de trailing stops"""
