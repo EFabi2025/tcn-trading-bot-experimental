@@ -1169,6 +1169,9 @@ class SimpleProfessionalTradingManager:
                         position, current_price
                     )
 
+                    # ✅ CRÍTICO: Actualizar la posición en el snapshot con el estado del trailing stop
+                    snapshot.active_positions[i] = updated_position
+
                     # Si se actualiza el trailing, registrar el cambio
                     if hasattr(updated_position, 'trailing_stop_active') and updated_position.trailing_stop_active:
                         if updated_position.trailing_movements > position.trailing_movements:
