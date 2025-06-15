@@ -556,11 +556,14 @@ class SimpleProfessionalTradingManager:
                 # Generar reporte TCN
                 tcn_report = self.portfolio_manager.format_tcn_style_report(snapshot)
 
+                # ✅ NUEVO: Agregar reporte de modelos TCN
+                tcn_models_report = await self._generate_tcn_models_section()
+
                 # ✅ NUEVO: Agregar reporte de diversificación
                 diversification_report = await self._generate_diversification_section(snapshot)
 
                 # Combinar reportes
-                full_report = tcn_report + diversification_report
+                full_report = tcn_report + tcn_models_report + diversification_report
 
                 # Mostrar en consola
                 print("\n" + "="*80)
@@ -578,6 +581,94 @@ class SimpleProfessionalTradingManager:
 
         except Exception as e:
             print(f"❌ Error generando reporte TCN: {e}")
+
+    async def _generate_tcn_models_section(self) -> str:
+        """🤖 Generar sección de estado de modelos TCN"""
+        try:
+            models_section = f"""
+
+🤖 **ESTADO DE MODELOS TCN**
+"""
+
+            # ✅ CORREGIDO: Inicializar predictor TCN si no existe (igual que en _generate_tcn_signals)
+            if not hasattr(self, 'tcn_predictor'):
+                try:
+                    from tcn_definitivo_predictor import TCNDefinitivoPredictor
+                    self.tcn_predictor = TCNDefinitivoPredictor()
+                    print("🎯 Predictor TCN DEFINITIVO inicializado para reporte Discord")
+                except Exception as e:
+                    models_section += f"❌ **Error inicializando predictor**: {str(e)[:50]}...\n"
+                    return models_section
+
+            # Obtener precios actuales para las predicciones (reutilizar si ya los tenemos)
+            current_prices = {}
+            for symbol in self.symbols:
+                try:
+                    price = await self.get_current_price(symbol)
+                    if price > 0:
+                        current_prices[symbol] = price
+                except Exception as e:
+                    print(f"⚠️ Error obteniendo precio {symbol} para Discord: {e}")
+
+            if not current_prices:
+                models_section += "⚠️ **Sin datos de precios para análisis**\n"
+                return models_section
+
+            # Generar predicciones para cada símbolo
+            for symbol in self.symbols:
+                try:
+                    if symbol not in current_prices:
+                        models_section += f"❌ **{symbol}**: Sin precio disponible\n"
+                        continue
+
+                    # Obtener predicción del modelo
+                    prediction = None
+                    if hasattr(self.tcn_predictor, 'predict_symbol'):
+                        prediction = self.tcn_predictor.predict_symbol(symbol)
+
+                    if prediction:
+                        signal = prediction['signal']
+                        confidence = prediction['confidence']
+                        probabilities = prediction.get('probabilities', {})
+
+                        # Emoji según la señal
+                        signal_emoji = {
+                            'BUY': '🟢',
+                            'SELL': '🔴',
+                            'HOLD': '🟡'
+                        }.get(signal, '⚪')
+
+                        # Formato de confianza con color
+                        conf_status = "🔥" if confidence >= 0.80 else "✅" if confidence >= 0.70 else "⚠️"
+
+                        models_section += f"{signal_emoji} **{symbol}**: {signal} ({conf_status} {confidence:.1%})\n"
+
+                        # Mostrar distribución de probabilidades si están disponibles
+                        if probabilities:
+                            buy_prob = probabilities.get('BUY', 0)
+                            hold_prob = probabilities.get('HOLD', 0)
+                            sell_prob = probabilities.get('SELL', 0)
+                            models_section += f"   📊 BUY:{buy_prob:.1%} | HOLD:{hold_prob:.1%} | SELL:{sell_prob:.1%}\n"
+
+                        # Precio actual
+                        current_price = current_prices[symbol]
+                        models_section += f"   💰 Precio: ${current_price:,.4f}\n"
+
+                    else:
+                        models_section += f"❌ **{symbol}**: Error en predicción\n"
+
+                except Exception as e:
+                    models_section += f"❌ **{symbol}**: Error ({str(e)[:30]}...)\n"
+                    continue
+
+            # Agregar timestamp del análisis
+            models_section += f"\n⏰ Análisis: {datetime.now().strftime('%H:%M:%S')}\n"
+
+            return models_section
+
+        except Exception as e:
+            print(f"⚠️ Error generando sección de modelos TCN: {e}")
+            return f"\n🤖 **MODELOS TCN:** Error al generar análisis ({str(e)[:30]}...)\n"
 
     async def _generate_diversification_section(self, snapshot) -> str:
         """🎯 Generar sección de diversificación para el reporte"""
@@ -884,7 +975,7 @@ class SimpleProfessionalTradingManager:
                         if has_position:
                             print(f"  ⏸️ Señal BUY ignorada - Ya existe(n) {len(existing_positions)} posición(es) en {symbol}")
                             continue
-                        
+
                         balance_sufficient = self.current_balance >= self.risk_manager.limits.min_position_value_usdt
                         if not balance_sufficient:
                             print(f"  📊 SEÑAL BUY GENERADA (solo análisis): {symbol} {signal} ({confidence:.1%}) - Balance insuficiente para trade")
@@ -899,16 +990,16 @@ class SimpleProfessionalTradingManager:
                             print(f"  🔥 SEÑAL SELL VÁLIDA - Se cerrarán {len(existing_positions)} posición(es) en {symbol}")
 
                     # ✅ SEÑAL VÁLIDA - Si hemos llegado hasta aquí, la señal es buena.
-                    signals[symbol] = {
-                        'signal': signal,
-                        'confidence': confidence,
-                        'current_price': current_price,
-                        'timestamp': datetime.now(),
-                        'reason': 'TCN_MODEL_PREDICTION',
-                        'available_usdt': self.current_balance,
-                        'probabilities': prediction.get('probabilities', {}),
+                        signals[symbol] = {
+                            'signal': signal,
+                            'confidence': confidence,
+                            'current_price': current_price,
+                            'timestamp': datetime.now(),
+                            'reason': 'TCN_MODEL_PREDICTION',
+                            'available_usdt': self.current_balance,
+                            'probabilities': prediction.get('probabilities', {}),
                         'balance_sufficient': self.current_balance >= self.risk_manager.limits.min_position_value_usdt
-                    }
+                        }
                     print(f"  ✅ SEÑAL AÑADIDA A LA COLA: {symbol} {signal} ({confidence:.1%})")
 
                 except Exception as e:
@@ -1081,7 +1172,7 @@ class SimpleProfessionalTradingManager:
         # ✅ **CRÍTICO**: Marcar la posición como inactiva INMEDIATAMENTE.
         # Esto previene cualquier intento de doble cierre en el mismo ciclo.
         position.is_active = False
-        
+
         print(f"👇 Iniciando cierre para {position.symbol} (ID Orden: {order_id}) por motivo: {reason}")
 
         # Ahora el resto de la función puede proceder de forma segura.

@@ -50,6 +50,15 @@ class TCNDefinitivoPredictor:
             'BNBUSDT': {'sell': -0.0015, 'buy': 0.0015}   # -0.15%/+0.15%
         }
 
+        # 🔧 SEQUENCE LENGTH DINÁMICO POR MODELO
+        self.sequence_lengths = {
+            'BTCUSDT': 48,  # Modelo antiguo
+            'ETHUSDT': 24,  # Modelo reentrenado
+            'BNBUSDT': 48   # Modelo antiguo
+        }
+
+        self.n_features = 66
+
         # ✅ CORREGIDO: Cargar modelos automáticamente al inicializar
         self.load_all_models()
 
@@ -127,7 +136,7 @@ class TCNDefinitivoPredictor:
     def create_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Crear las 66 features técnicos EXACTOS utilizados en entrenamiento
-        Replica exactamente la lógica de tcn_definitivo_trainer.py con TA-Lib
+        ✅ CORREGIDO: Parámetros consistentes con CentralizedFeaturesEngine
         """
         try:
             import talib
@@ -197,13 +206,19 @@ class TCNDefinitivoPredictor:
             features['aroon_down'] = aroon_down
 
             # === VOLATILITY INDICATORS (10 features) ===
-            # Bollinger Bands
-            bb_upper, bb_middle, bb_lower = talib.BBANDS(close)
+            # ✅ CORREGIDO: Bollinger Bands con parámetros explícitos (igual que CentralizedFeaturesEngine)
+            bb_upper, bb_middle, bb_lower = talib.BBANDS(close, timeperiod=20, nbdevup=2, nbdevdn=2, matype=0)
             features['bb_upper'] = bb_upper
             features['bb_middle'] = bb_middle
             features['bb_lower'] = bb_lower
-            features['bb_width'] = (bb_upper - bb_lower) / bb_middle
-            features['bb_position'] = (close - bb_lower) / (bb_upper - bb_lower)
+
+            # ✅ CORREGIDO: Manejo seguro de división por cero
+            bb_range = bb_upper - bb_lower
+            bb_range = np.where(bb_range == 0, 1e-8, bb_range)
+            bb_middle_safe = np.where(bb_middle == 0, 1e-8, bb_middle)
+
+            features['bb_width'] = bb_range / bb_middle_safe
+            features['bb_position'] = (close - bb_lower) / bb_range
 
             # ATR
             features['atr_14'] = talib.ATR(high, low, close, timeperiod=14)
@@ -224,17 +239,24 @@ class TCNDefinitivoPredictor:
             # Volume SMA
             features['volume_sma_10'] = talib.SMA(volume, timeperiod=10)
             features['volume_sma_20'] = talib.SMA(volume, timeperiod=20)
-            features['volume_ratio'] = volume / features['volume_sma_20']
+
+            # ✅ CORREGIDO: Manejo seguro de división por cero
+            volume_sma_20_safe = np.where(features['volume_sma_20'] == 0, 1e-8, features['volume_sma_20'])
+            features['volume_ratio'] = volume / volume_sma_20_safe
 
             # Money Flow Index
             features['mfi_14'] = talib.MFI(high, low, close, volume, timeperiod=14)
             features['mfi_20'] = talib.MFI(high, low, close, volume, timeperiod=20)
 
             # === PRICE PATTERNS (8 features) ===
-            # Price ratios
-            features['hl_ratio'] = (high - low) / close
-            features['oc_ratio'] = (close - df['open'].values) / close
-            features['price_position'] = (close - low) / (high - low)
+            # ✅ CORREGIDO: Manejo seguro de división por cero
+            close_safe = np.where(close == 0, 1e-8, close)
+            hl_range = high - low
+            hl_range_safe = np.where(hl_range == 0, 1e-8, hl_range)
+
+            features['hl_ratio'] = hl_range / close_safe
+            features['oc_ratio'] = (close - df['open'].values) / close_safe
+            features['price_position'] = (close - low) / hl_range_safe
 
             # Price momentum
             close_series = pd.Series(close, index=features.index)
@@ -261,8 +283,9 @@ class TCNDefinitivoPredictor:
             features['support_touch'] = (close_series <= close_series.rolling(20).min() * 1.01).astype(int)
 
             # Market efficiency
-            features['efficiency_ratio'] = (np.abs(close_series - close_series.shift(10)) /
-                                          (np.abs(close_series.diff()).rolling(10).sum())).fillna(0)
+            price_diff_abs = np.abs(close_series.diff()).rolling(10).sum()
+            price_diff_abs_safe = price_diff_abs.replace(0, 1e-8)
+            features['efficiency_ratio'] = (np.abs(close_series - close_series.shift(10)) / price_diff_abs_safe).fillna(0)
 
             # Fractal dimension (simplificado)
             features['fractal_dimension'] = 0.5  # Valor constante por ahora
@@ -274,16 +297,17 @@ class TCNDefinitivoPredictor:
             features['volume_momentum'] = pd.Series(volume, index=features.index).pct_change().fillna(0)
             features['price_acceleration'] = features['price_change_1'].diff().fillna(0)
 
-            # Limpiar datos
-            features = features.fillna(method='ffill').fillna(0)
-            features = features.replace([np.inf, -np.inf], 0)
+            # ✅ MEJORADO: Limpiar datos de forma más robusta
+            features = features.replace([np.inf, -np.inf], np.nan)
+            features = features.fillna(method='ffill').fillna(method='bfill').fillna(0)
 
-            # Clip valores extremos
+            # ✅ MEJORADO: Clip valores extremos de forma más conservadora
             for col in features.columns:
                 if features[col].dtype in ['float64', 'int64']:
                     q99 = features[col].quantile(0.99)
                     q01 = features[col].quantile(0.01)
-                    features[col] = features[col].clip(q01, q99)
+                    if pd.notna(q99) and pd.notna(q01) and q99 != q01:
+                        features[col] = features[col].clip(q01, q99)
 
             # Verificar que tenemos exactamente 66 features
             if len(features.columns) != 66:
@@ -293,6 +317,7 @@ class TCNDefinitivoPredictor:
                     features[f'padding_{len(features.columns)}'] = 0
                 features = features.iloc[:, :66]  # Tomar solo las primeras 66
 
+            logger.info(f"✅ Features calculadas (legacy corregido): {len(features.columns)} features")
             return features
 
         except Exception as e:
@@ -319,19 +344,19 @@ class TCNDefinitivoPredictor:
             features = self.create_features(market_data)
 
             # Verificar que tenemos suficientes datos
-            if len(features) < 48:  # Secuencia mínima requerida
-                logger.warning(f"Datos insuficientes para {symbol}: {len(features)} < 48")
+            if len(features) < self.sequence_lengths[symbol]:  # Secuencia mínima requerida
+                logger.warning(f"Datos insuficientes para {symbol}: {len(features)} < {self.sequence_lengths[symbol]}")
                 return None
 
             # Seleccionar features utilizadas en entrenamiento
             feature_cols = self.feature_columns[symbol]
-            features_selected = features[feature_cols].iloc[-48:]  # Últimas 48 observaciones
+            features_selected = features[feature_cols].iloc[-self.sequence_lengths[symbol]:]  # Últimas observaciones
 
             # Normalizar con el scaler entrenado
             features_scaled = self.scalers[symbol].transform(features_selected)
 
             # Crear secuencia para el modelo
-            sequence = features_scaled.reshape(1, 48, len(feature_cols))
+            sequence = features_scaled.reshape(1, self.sequence_lengths[symbol], len(feature_cols))
 
             # Realizar predicción
             prediction = self.models[symbol].predict(sequence, verbose=0)
@@ -431,6 +456,9 @@ class TCNDefinitivoPredictor:
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
             df.set_index('timestamp', inplace=True)
 
+            # ✅ DIAGNÓSTICO: Guardar datos de entrada para ETH
+
+
             # Realizar predicción
             return self.predict(symbol, df)
 
@@ -449,6 +477,249 @@ class TCNDefinitivoPredictor:
             'load_timestamp': datetime.now().isoformat()
         }
         return info
+
+    def predict_signal(self, symbol: str) -> Dict:
+        """🎯 Predecir señal de trading usando TCN"""
+        try:
+            # Verificar que el modelo existe
+            if symbol not in self.models:
+                return {'signal': 'HOLD', 'confidence': 0.0, 'error': f'Modelo no disponible para {symbol}'}
+
+            # Obtener datos de mercado
+            market_data = self._get_market_data(symbol)
+            if market_data is None or len(market_data) < self.sequence_lengths[symbol]:
+                return {'signal': 'HOLD', 'confidence': 0.0, 'error': 'Datos insuficientes'}
+
+            # Calcular features
+            features_df = self._calculate_features_legacy_corrected(market_data, symbol)
+            if features_df is None or len(features_df) < self.sequence_lengths[symbol]:
+                return {'signal': 'HOLD', 'confidence': 0.0, 'error': 'Features insuficientes'}
+
+            # Preparar datos para predicción
+            model = self.models[symbol]
+            scaler = self.scalers[symbol]
+            feature_columns = self.feature_columns[symbol]
+
+            # Seleccionar y escalar features
+            X = features_df[feature_columns].values
+            X_scaled = scaler.transform(X)
+            X_sequence = X_scaled[-self.sequence_lengths[symbol]:].reshape(1, self.sequence_lengths[symbol], len(feature_columns))
+
+            # Hacer predicción
+            prediction = model.predict(X_sequence, verbose=0)[0]
+
+            # Aplicar class weights si están disponibles
+            if symbol in self.class_weights:
+                class_weights = self.class_weights[symbol]
+                weighted_prediction = prediction * np.array([class_weights.get(i, 1.0) for i in range(len(prediction))])
+                weighted_prediction = weighted_prediction / np.sum(weighted_prediction)
+            else:
+                weighted_prediction = prediction
+
+            # Determinar señal y confianza
+            signal_idx = np.argmax(weighted_prediction)
+            confidence = float(weighted_prediction[signal_idx])
+            signal_map = {0: 'BUY', 1: 'HOLD', 2: 'SELL'}
+            signal = signal_map[signal_idx]
+
+            # 🔧 FILTRO DE CORDURA: Validar predicción contra indicadores técnicos básicos
+            sanity_check_result = self._sanity_check_prediction(features_df, signal, confidence, symbol)
+            if sanity_check_result['override']:
+                logger.warning(f"⚠️ FILTRO DE CORDURA: {sanity_check_result['reason']}")
+                signal = sanity_check_result['corrected_signal']
+                confidence = sanity_check_result['corrected_confidence']
+
+            # Log de la predicción
+            probabilities = {
+                'BUY': float(weighted_prediction[0]),
+                'HOLD': float(weighted_prediction[1]),
+                'SELL': float(weighted_prediction[2])
+            }
+
+            logger.info(f"🎯 {symbol}: {signal} (conf: {confidence:.3f})")
+
+            return {
+                'signal': signal,
+                'confidence': confidence,
+                'probabilities': probabilities,
+                'current_price': float(market_data['close'].iloc[-1]),
+                'rsi': float(features_df['rsi_14'].iloc[-1]),
+                'macd': float(features_df['macd'].iloc[-1])
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Error en predicción para {symbol}: {e}")
+            return {'signal': 'HOLD', 'confidence': 0.0, 'error': str(e)}
+
+    def _sanity_check_prediction(self, features_df: pd.DataFrame, signal: str, confidence: float, symbol: str) -> Dict:
+        """🔍 Filtro de cordura para validar predicciones contra indicadores técnicos básicos"""
+        try:
+            # Obtener valores de indicadores técnicos de la última fila
+            last_row = features_df.iloc[-1]
+
+            rsi = last_row['rsi_14']
+            macd = last_row['macd']
+            stoch_k = last_row['stoch_k']
+            uptrend = last_row.get('uptrend_strength', 0.5)
+            downtrend = last_row.get('downtrend_strength', 0.5)
+
+            # Contadores de señales técnicas
+            buy_signals = 0
+            sell_signals = 0
+
+            # Análisis RSI
+            if rsi < 30:
+                buy_signals += 2  # RSI oversold = fuerte señal de compra
+            elif rsi > 70:
+                sell_signals += 2  # RSI overbought = fuerte señal de venta
+            elif 30 <= rsi <= 45:
+                buy_signals += 1  # RSI bajo-neutral = señal débil de compra
+            elif 55 <= rsi <= 70:
+                sell_signals += 1  # RSI alto-neutral = señal débil de venta
+
+            # Análisis MACD (más estricto)
+            if macd > 0.1:
+                buy_signals += 2  # MACD fuertemente positivo
+            elif macd > 0:
+                buy_signals += 1  # MACD ligeramente positivo
+            elif macd < -0.2:
+                sell_signals += 2  # MACD fuertemente negativo
+            else:
+                sell_signals += 1  # MACD ligeramente negativo
+
+            # Análisis Stochastic
+            if stoch_k < 20:
+                buy_signals += 1
+            elif stoch_k > 80:
+                sell_signals += 2  # Stoch overbought = señal fuerte de venta
+
+            # Análisis de tendencia
+            if uptrend > downtrend + 0.2:  # Uptrend dominante
+                buy_signals += 1
+            elif downtrend > uptrend + 0.2:  # Downtrend dominante
+                sell_signals += 1
+
+            # Determinar señal técnica dominante
+            if buy_signals > sell_signals + 2:
+                technical_signal = 'BUY'
+            elif sell_signals > buy_signals + 2:
+                technical_signal = 'SELL'
+            else:
+                technical_signal = 'HOLD'
+
+            # Verificar contradicciones graves (umbral más bajo para ETH)
+            contradiction_threshold = 0.65 if symbol == 'ETHUSDT' else 0.75
+
+            # Caso 1: Modelo dice BUY fuerte pero indicadores dicen SELL
+            if (signal == 'BUY' and confidence > contradiction_threshold and
+                technical_signal == 'SELL' and sell_signals >= 3):
+                return {
+                    'override': True,
+                    'reason': f"BUY {confidence:.1%} contradice indicadores técnicos (RSI:{rsi:.1f}, MACD:{macd:.3f}, Stoch:{stoch_k:.1f})",
+                    'corrected_signal': 'HOLD',
+                    'corrected_confidence': 0.55
+                }
+
+            # Caso 2: MACD fuertemente negativo + BUY fuerte (específico para ETH)
+            if (symbol == 'ETHUSDT' and signal == 'BUY' and confidence > 0.8 and macd < -0.25):
+                return {
+                    'override': True,
+                    'reason': f"BUY {confidence:.1%} con MACD negativo ({macd:.3f}) - señal contradictoria",
+                    'corrected_signal': 'HOLD',
+                    'corrected_confidence': 0.6
+                }
+
+            # Caso 3: Modelo dice SELL fuerte pero indicadores dicen BUY
+            if (signal == 'SELL' and confidence > contradiction_threshold and
+                technical_signal == 'BUY' and buy_signals >= 4):
+                return {
+                    'override': True,
+                    'reason': f"SELL {confidence:.1%} contradice indicadores técnicos (RSI:{rsi:.1f}, MACD:{macd:.3f}, Stoch:{stoch_k:.1f})",
+                    'corrected_signal': 'HOLD',
+                    'corrected_confidence': 0.6
+                }
+
+            # Caso 4: Confianza extrema (>85%) que contradice indicadores básicos
+            if confidence > 0.85:
+                if ((signal == 'BUY' and sell_signals > buy_signals) or
+                    (signal == 'SELL' and buy_signals > sell_signals)):
+                    return {
+                        'override': True,
+                        'reason': f"Confianza extrema {confidence:.1%} para {signal} no justificada por indicadores",
+                        'corrected_signal': technical_signal if technical_signal != 'HOLD' else 'HOLD',
+                        'corrected_confidence': min(0.7, confidence * 0.8)
+                    }
+
+            # No hay contradicción grave
+            return {'override': False}
+
+        except Exception as e:
+            logger.warning(f"⚠️ Error en filtro de cordura para {symbol}: {e}")
+            return {'override': False}
+
+    def _get_market_data(self, symbol: str, limit: int = 100) -> Optional[pd.DataFrame]:
+        """📊 Obtener datos de mercado de Binance"""
+        try:
+            import requests
+            from datetime import datetime, timedelta
+
+            # URL de la API de Binance
+            url = "https://api.binance.com/api/v3/klines"
+
+            # Parámetros para obtener datos de 1 minuto
+            params = {
+                'symbol': symbol,
+                'interval': '1m',
+                'limit': limit
+            }
+
+            # Hacer la petición
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+
+            # Procesar datos
+            data = response.json()
+
+            # Convertir a DataFrame
+            df = pd.DataFrame(data, columns=[
+                'timestamp', 'open', 'high', 'low', 'close', 'volume',
+                'close_time', 'quote_volume', 'trades', 'taker_buy_base',
+                'taker_buy_quote', 'ignore'
+            ])
+
+            # Convertir tipos
+            numeric_columns = ['open', 'high', 'low', 'close', 'volume']
+            for col in numeric_columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            df = df.set_index('timestamp').sort_index()
+
+            return df[['open', 'high', 'low', 'close', 'volume']]
+
+        except Exception as e:
+            logger.error(f"Error obteniendo datos de mercado para {symbol}: {e}")
+            return None
+
+    def _calculate_features_legacy_corrected(self, market_data: pd.DataFrame, symbol: str) -> Optional[pd.DataFrame]:
+        """🔧 Calcular features usando el método legacy corregido"""
+        try:
+            # Usar el método create_features existente
+            features_df = self.create_features(market_data)
+
+            if features_df.empty:
+                logger.error(f"No se pudieron calcular features para {symbol}")
+                return None
+
+            # Limpiar datos
+            features_df = features_df.dropna()
+
+
+            return features_df
+
+        except Exception as e:
+            logger.error(f"Error calculando features para {symbol}: {e}")
+            return None
 
 # Función de utilidad para testing
 def test_definitivo_predictor():
