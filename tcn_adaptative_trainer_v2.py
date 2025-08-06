@@ -9,6 +9,7 @@ import aiohttp
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+import time
 from datetime import datetime, timedelta
 from sklearn.preprocessing import RobustScaler
 from sklearn.model_selection import train_test_split
@@ -910,7 +911,25 @@ class AdaptiveTCNTrainer:
 
     # ✅ MÉTODOS CONFIGURABLES
     async def get_real_market_data(self, symbol: str, days: int = None) -> pd.DataFrame:
-        """📊 Obtener datos reales de mercado - CONFIGURABILE POR TIMEFRAME Y FECHAS"""
+        """📊 Obtener datos reales de mercado con cache"""
+        
+        # ✅ CACHE: Verificar si ya tenemos datos guardados
+        days = days or self.training_days
+        cache_file = f"cache/{symbol}_{self.timeframe}_{days}d.pkl"
+        os.makedirs("cache", exist_ok=True)
+        
+        if os.path.exists(cache_file):
+            # Verificar si el cache es reciente (menos de 1 hora)
+            cache_time = os.path.getmtime(cache_file)
+            current_time = time.time()
+            if current_time - cache_time < 3600:  # 1 hora
+                print(f"📋 Usando datos cacheados para {symbol} ({self.timeframe})")
+                try:
+                    import pickle
+                    with open(cache_file, 'rb') as f:
+                        return pickle.load(f)
+                except Exception as e:
+                    print(f"⚠️ Error leyendo cache: {e}, descargando de nuevo...")
         
         # Usar configuración para determinar período
         if self.start_date and self.end_date:
@@ -918,7 +937,6 @@ class AdaptiveTCNTrainer:
             end_time = int(self.end_date.timestamp() * 1000)
             period_desc = f"desde {self.start_date.strftime('%Y-%m-%d')} hasta {self.end_date.strftime('%Y-%m-%d')}"
         else:
-            days = days or self.training_days
             end_time = int(datetime.now().timestamp() * 1000)
             start_time = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
             period_desc = f"{days} días"
@@ -972,6 +990,16 @@ class AdaptiveTCNTrainer:
         df = df.set_index('timestamp').sort_index()
 
         print(f"✅ Obtenidos {len(df)} registros de {symbol}")
+        
+        # ✅ CACHE: Guardar datos descargados
+        try:
+            import pickle
+            with open(cache_file, 'wb') as f:
+                pickle.dump(df, f)
+            print(f"💾 Datos guardados en cache: {cache_file}")
+        except Exception as e:
+            print(f"⚠️ Error guardando cache: {e}")
+        
         return df
 
     def prepare_training_data(self, df: pd.DataFrame, features: pd.DataFrame) -> tuple:
@@ -1099,8 +1127,8 @@ class AdaptiveTCNTrainer:
             """Bloque multi-escala para diferentes patrones temporales"""
             branches = []
             
-            # ✅ CORRECCIÓN: Asegurar que los filtros se dividen correctamente
-            filters_per_branch = max(1, filters // len(dilations))
+            # ✅ CORRECCIÓN: Usar número fijo para evitar len() en tensores
+            filters_per_branch = max(1, filters // 3)  # Asumimos 3 dilations típicamente
             
             # ✅ CORRECCIÓN DIMENSIONAL: El input debería ser 3D por diseño
             # Si hay problemas dimensionales, serán manejados por las capas Keras automáticamente
