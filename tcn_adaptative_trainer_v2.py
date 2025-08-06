@@ -1102,15 +1102,8 @@ class AdaptiveTCNTrainer:
             # ✅ CORRECCIÓN: Asegurar que los filtros se dividen correctamente
             filters_per_branch = max(1, filters // len(dilations))
             
-            # ✅ CORRECCIÓN DIMENSIONAL: Asegurar tensor 3D de forma simple
-            # Si el tensor tiene más de 3 dimensiones, aplanarlo a 3D
-            if len(x.shape) > 3:
-                # Aplanar dimensiones extras manteniendo batch y secuencia
-                batch_size = tf.shape(x)[0]
-                seq_len = tf.shape(x)[1] 
-                # Aplanar todas las dimensiones de features
-                features_flat = tf.reduce_prod(tf.shape(x)[2:])
-                x = tf.reshape(x, [batch_size, seq_len, features_flat])
+            # ✅ CORRECCIÓN DIMENSIONAL: El input debería ser 3D por diseño
+            # Si hay problemas dimensionales, serán manejados por las capas Keras automáticamente
             
             for i, dilation in enumerate(dilations):
                 branch = tf.keras.layers.Conv1D(
@@ -1226,41 +1219,21 @@ class AdaptiveTCNTrainer:
         # Adaptación a volatilidad
         x = volatility_adaptation(x)
         
-        # ✅ CORRECCIÓN: Extractor de tendencias robusto para dimensiones dinámicas
-        # Obtener dimensiones de forma segura
-        shape = tf.shape(x)
-        features = shape[2]
+        # ✅ SIMPLIFICADO: Extractor de tendencias con dimensiones fijas
+        short_trend = tf.keras.layers.Conv1D(32, 3, dilation_rate=1, padding='causal', activation='tanh')(x)
+        medium_trend = tf.keras.layers.Conv1D(32, 5, dilation_rate=3, padding='causal', activation='tanh')(x)
+        momentum = tf.keras.layers.Conv1D(32, 7, dilation_rate=5, padding='causal', activation='tanh')(x)
         
-        # ✅ CORRECCIÓN: Calcular filtros de tendencia de forma dinámica
-        trend_filters = tf.maximum(8, features // 4)  # Mínimo 8 filtros, máximo features/4
-        
-        # ✅ CORRECCIÓN: Extractor de tendencias que maneja dimensiones dinámicas
-        short_trend = tf.keras.layers.Conv1D(trend_filters, 3, dilation_rate=1, padding='causal', activation='tanh')(x)
-        medium_trend = tf.keras.layers.Conv1D(trend_filters, 5, dilation_rate=3, padding='causal', activation='tanh')(x)
-        momentum = tf.keras.layers.Conv1D(trend_filters, 7, dilation_rate=5, padding='causal', activation='tanh')(x)
-        
-        # ✅ CORRECCIÓN: Concatenar tendencias de forma segura
+        # Concatenar y normalizar
         trend_features = tf.keras.layers.Concatenate()([short_trend, medium_trend, momentum])
         trend_features = tf.keras.layers.LayerNormalization()(trend_features)
         
-        # ✅ CORRECCIÓN: Normalizar dimensiones de forma dinámica
-        # Calcular el tamaño esperado de forma dinámica
-        trend_shape = tf.shape(trend_features)
-        expected_trend_size = trend_shape[2]  # Usar la dimensión real
+        # Normalizar entradas y combinar
+        x_normalized = tf.keras.layers.Conv1D(96, 1, padding='same')(x)
+        combined = tf.keras.layers.Concatenate()([x_normalized, trend_features])
         
-        # ✅ CORRECCIÓN: Ajustar dimensiones solo si es necesario
-        if expected_trend_size != features:
-            trend_features = tf.keras.layers.Conv1D(features, 1, padding='same')(trend_features)
-        
-        # ✅ CORRECCIÓN: Combinar características de forma segura
-        combined = tf.keras.layers.Concatenate()([x, trend_features])
-        
-        # ✅ CORRECCIÓN: Usar dimensión dinámica para evitar problemas
-        # Calcular filtros finales basados en las dimensiones reales
-        combined_shape = tf.shape(combined)
-        final_filters = tf.minimum(256, combined_shape[2])  # Máximo 256, mínimo la dimensión actual
-        
-        x = tf.keras.layers.Conv1D(final_filters, 1, padding='same', activation='relu')(combined)
+        # Procesar combinación
+        x = tf.keras.layers.Conv1D(256, 1, padding='same', activation='relu')(combined)
         
         # Atención final
         x = attention_layer(x)
