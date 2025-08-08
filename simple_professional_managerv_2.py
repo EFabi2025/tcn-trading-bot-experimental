@@ -1708,6 +1708,11 @@ class SimpleProfessionalTradingManager:
             # Por defecto, no filtrar
             filter_reason = f"Sin filtro aplicado - {regime} con confianza {market_confidence:.1%}"
 
+            # 🎯 BYPASS MODERADO: Mercado bullish con alta volatilidad = OPORTUNIDAD
+            if is_bullish_high_vol and confidence >= base_threshold * 0.8:  # 🎯 MODERADO: 80% del umbral base (52% si base es 65%)
+                filter_reason = f"BYPASS BULLISH+VOLATILIDAD: Oportunidad detectada con {confidence:.1f}% confianza"
+                return signal, filter_reason
+
             # 🔴 FILTROS BEARISH RELAJADOS - Sistema gradual por intensidad (MUCHO MÁS PERMISIVO)
             if regime == 'BEARISH' and market_confidence > 0.8:  # Solo aplicar si confianza muy alta
 
@@ -1803,17 +1808,22 @@ class SimpleProfessionalTradingManager:
                         filter_reason = f"SELL permitido en BULLISH para tomar ganancias ({confidence:.1f}%)"
 
             # 🟡 FILTROS DE VOLATILIDAD - Ajustar según volatilidad del mercado (CENTRALIZADOS)
+            # 🚀 NUEVO: Detección de mercado bullish con alta volatilidad (oportunidad)
+            is_bullish_high_vol = (regime == 'BULLISH' and
+                                 market_confidence > 0.8 and
+                                 volatility == 'HIGH')
+
             if volatility == 'HIGH' and fear_factor > 0.8:
                 # ✅ CENTRALIZADO: En mercado BULLISH, la volatilidad puede ser oportunidad
                 if regime == 'BULLISH' and market_confidence > 0.9:
-                    # En mercado muy bullish, relajar filtros de volatilidad
+                    # 🎯 MODERADO: En mercado muy bullish, permitir algunas oportunidades más
                     volatility_thresholds = {
-                        'BTCUSDT': base_threshold * 0.9,   # ✅ CENTRALIZADO: 90% del umbral base
-                        'ETHUSDT': base_threshold * 0.9,   # ✅ CENTRALIZADO: 90% del umbral base
-                        'BNBUSDT': base_threshold * 0.9,   # ✅ CENTRALIZADO: 90% del umbral base
-                        'XRPUSDT': base_threshold * 0.9    # ✅ CENTRALIZADO: 90% del umbral base
+                        'BTCUSDT': base_threshold * 0.85,   # 🎯 MODERADO: 85% del umbral base (era 90%)
+                        'ETHUSDT': base_threshold * 0.85,   # 🎯 MODERADO: 85% del umbral base (era 90%)
+                        'BNBUSDT': base_threshold * 0.85,   # 🎯 MODERADO: 85% del umbral base (era 90%)
+                        'XRPUSDT': base_threshold * 0.85    # 🎯 MODERADO: 85% del umbral base (era 90%)
                     }
-                    vol_adjustment = "RELAJADO_BULLISH"
+                    vol_adjustment = "MODERADO_BULLISH"
                 else:
                     # ✅ CENTRALIZADO: Umbrales con +5% para alta volatilidad
                     volatility_thresholds = {
@@ -1830,9 +1840,11 @@ class SimpleProfessionalTradingManager:
                         signal = 'HOLD'
                         filter_reason = f"Alta volatilidad ({vol_adjustment}) - {symbol} BUY requiere >{required_vol_confidence:.1f}% confianza"
                 elif signal == 'SELL':
-                    # ✅ CENTRALIZADO: En bullish extremo, relajar SELL en volatilidad
+                    # 🎯 MODERADO: En bullish extremo, permitir SELL con confianza moderada
                     if regime == 'BULLISH' and market_confidence > 0.9:
-                        min_sell_vol_conf = base_threshold  # ✅ CENTRALIZADO: Usar umbral base
+                        min_sell_vol_conf = base_threshold * 0.95  # 🎯 MODERADO: 95% del umbral base (era 100%)
+                    elif regime == 'BULLISH' and market_confidence > 0.7:
+                        min_sell_vol_conf = base_threshold * 0.98  # 🎯 MODERADO: 98% para bullish moderado
                     else:
                         min_sell_vol_conf = base_threshold * 1.05 + 5  # ✅ VOLATILIDAD: +5% base + 5% extra
 
@@ -1963,23 +1975,23 @@ class SimpleProfessionalTradingManager:
                                        market_context.get('confidence', 0) > 0.9
 
                 if market_is_very_bullish:
-                    # ✅ RELAJADO: Umbrales muy bajos para mercado muy bullish con ensemble
+                    # 🎯 MODERADO: Umbrales moderadamente relajados para mercado muy bullish
                     min_confidence_for_change = {
-                        'ETHUSDT': 60.0,  # ✅ RELAJADO: De 75% a 60% para ETH
-                        'BTCUSDT': 60.0,  # ✅ RELAJADO: De 75% a 60% para BTC
-                        'BNBUSDT': 60.0,  # ✅ RELAJADO: De 75% a 60% para BNB
-                        'XRPUSDT': 60.0   # ✅ RELAJADO: De 75% a 60% para XRP
-                    }.get(symbol, 55.0)
-                    signal_context = "RELAJADO_BULLISH_ENSEMBLE"  # Contexto de señal, no secret
+                        'ETHUSDT': 55.0,  # 🎯 MODERADO: De 60% a 55% para ETH
+                        'BTCUSDT': 55.0,  # 🎯 MODERADO: De 60% a 55% para BTC
+                        'BNBUSDT': 55.0,  # 🎯 MODERADO: De 60% a 55% para BNB
+                        'XRPUSDT': 55.0   # 🎯 MODERADO: De 60% a 55% para XRP
+                    }.get(symbol, 52.0)
+                    signal_context = "MODERADO_BULLISH_VOLATIL"  # Contexto de señal, no secret
                 else:
-                    # ✅ RELAJADO: Umbrales bajos para ensemble en otros contextos
+                    # 🎯 MODERADO: Umbrales moderados para ensemble en otros contextos
                     min_confidence_for_change = {
-                        'ETHUSDT': 65.0,  # ✅ RELAJADO: De 80% a 65% para ETH
-                        'BTCUSDT': 65.0,  # ✅ RELAJADO: De 80% a 65% para BTC
-                        'BNBUSDT': 65.0,  # ✅ RELAJADO: De 80% a 65% para BNB
-                        'XRPUSDT': 65.0   # ✅ RELAJADO: De 80% a 65% para XRP
-                    }.get(symbol, 60.0)
-                    signal_context = "RELAJADO_ENSEMBLE"
+                        'ETHUSDT': 60.0,  # 🎯 MODERADO: De 65% a 60% para ETH
+                        'BTCUSDT': 60.0,  # 🎯 MODERADO: De 65% a 60% para BTC
+                        'BNBUSDT': 60.0,  # 🎯 MODERADO: De 65% a 60% para BNB
+                        'XRPUSDT': 60.0   # 🎯 MODERADO: De 65% a 60% para XRP
+                    }.get(symbol, 58.0)
+                    signal_context = "MODERADO_ENSEMBLE"
 
                 if confidence < min_confidence_for_change:
                     return 'HOLD', f"Cambio de señal {history['last_signal']}→{signal} requiere >{min_confidence_for_change:.0f}% confianza (actual: {confidence:.1f}%) [{signal_context}]"

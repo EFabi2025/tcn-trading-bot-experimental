@@ -388,17 +388,26 @@ class UniversalBacktesterFixed:
 
             # 🔧 AUTO-DETECTAR LOOKBACK_WINDOW del modelo
             input_shape = self.model.input_shape
+            print(f"🔢 Input shape detectado: {input_shape}")
+
+            # ✅ CORRECCIÓN: Manejar modelos con entrada dinámica
             if len(input_shape) >= 2:
-                detected_lookback = input_shape[1]  # (None, timesteps, features)
-                if detected_lookback != self.lookback_window:
-                    print(f"🔧 Auto-ajustando lookback_window: {self.lookback_window} → {detected_lookback}")
-                    self.lookback_window = detected_lookback
+                detected_lookback = input_shape[1]
+                if detected_lookback is None:
+                    # Modelo con entrada dinámica - usar lookback_window por defecto
+                    print(f"🔧 Modelo con entrada dinámica detectado")
+                    print(f"🔧 Usando lookback_window por defecto: {self.lookback_window}")
+                else:
+                    # Modelo con entrada fija - auto-ajustar
+                    if detected_lookback != self.lookback_window:
+                        print(f"🔧 Auto-ajustando lookback_window: {self.lookback_window} → {detected_lookback}")
+                        self.lookback_window = detected_lookback
+            else:
+                print(f"⚠️  Input shape inesperado: {input_shape}")
 
             print(f"✅ {model_info['model_file']} cargado ({self.model.count_params():,} parámetros)")
             print(f"🔢 Input shape: {input_shape}")
             print(f"⏰ Lookback window: {self.lookback_window} timesteps")
-
-            # Cargar scaler
             with open(os.path.join(self.model_path, 'scaler.pkl'), 'rb') as f:
                 self.scaler = pickle.load(f)
             print("✅ Scaler cargado")

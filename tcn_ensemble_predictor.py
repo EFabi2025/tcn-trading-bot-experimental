@@ -1883,10 +1883,28 @@ class TCNEnsemblePredictor:
                         config_path = f'{model_dir}/config.json'
                         if os.path.exists(config_path):
                             import json
-                            with open(config_path, 'r') as f:
-                                model_config = json.load(f)
+                            try:
+                                with open(config_path, 'r') as f:
+                                    model_config = json.load(f)
+                                print(f"✅ Configuración cargada para {symbol} - {timeframe}")
+                            except json.JSONDecodeError as e:
+                                print(f"⚠️  Archivo config.json corrupto para {symbol} - {timeframe}: {e}")
+                                print(f"🔧 Usando configuración por defecto")
+                                model_config = {
+                                    'prediction_horizon': 6,
+                                    'lookback_window': 32,
+                                    'accuracy': 0.5
+                                }
+                            except Exception as e:
+                                print(f"⚠️  Error cargando config.json para {symbol} - {timeframe}: {e}")
+                                model_config = {
+                                    'prediction_horizon': 6,
+                                    'lookback_window': 32,
+                                    'accuracy': 0.5
+                                }
 
-                    # Cargar mejor modelo disponible
+                    # 🔧 CORREGIDO: Orden de carga correcto
+                    # 1. Cargar modelo
                     model_path = f'{model_dir}/best_model.h5'
                     if os.path.exists(model_path):
                         model = tf.keras.models.load_model(model_path)
@@ -1903,11 +1921,39 @@ class TCNEnsemblePredictor:
 
                         loaded_models += 1
 
-                        # Detectar y guardar ventana específica para este modelo
+                        # 2. Cargar scaler PRIMERO
+                        scaler_path = f'{model_dir}/scaler.pkl'
+                        if os.path.exists(scaler_path):
+                            with open(scaler_path, 'rb') as f:
+                                self.scalers[symbol][timeframe] = pickle.load(f)
+                            print(f"✅ Scaler cargado: {symbol} - {timeframe}")
+                        else:
+                            print(f"❌ Scaler no encontrado: {scaler_path}")
+                            continue
+
+                        # 3. Cargar features SEGUNDO
+                        features_path = None
+                        if os.path.exists(f'{model_dir}/feature_columns.pkl'):
+                            features_path = f'{model_dir}/feature_columns.pkl'
+                        elif os.path.exists(f'{model_dir}/features.pkl'):
+                            features_path = f'{model_dir}/features.pkl'
+
+                        if features_path and os.path.exists(features_path):
+                            with open(features_path, 'rb') as f:
+                                self.feature_columns[symbol][timeframe] = pickle.load(f)
+                            print(f"✅ Features cargadas: {symbol} - {timeframe}")
+                        else:
+                            print(f"❌ Features no encontradas en {model_dir}")
+                            continue
+
+                        # 4. AHORA SÍ detectar ventana (con scaler y features disponibles)
                         if model_type == 'adaptive_tcn' and 'lookback_window' in model_config:
                             detected_window = model_config['lookback_window']
+                            print(f"✅ Ventana del config: {detected_window}")
                         else:
                             detected_window = self.detect_model_input_shape(model, symbol, timeframe)
+                            print(f"✅ Ventana detectada: {detected_window}")
+
                         self.model_windows[symbol][timeframe] = detected_window
 
                     else:
@@ -2270,8 +2316,31 @@ class TCNEnsemblePredictor:
             return None
 
         try:
-            # Crear features usando el motor centralizado
-            features = self.features_engine.calculate_features(df, feature_set='tcn_definitivo')
+            # 🔧 NUEVO: Leer feature set del config del modelo
+            feature_set = 'tcn_definitivo'  # Default
+
+            # Buscar config del modelo
+            model_dirs = [
+                f'models/adaptive_{symbol.lower()}_{timeframe}_*',
+                f'models/definitivo_v3_{timeframe}_{symbol.lower()}',
+                f'models/definitivo_v3_{symbol.lower()}'
+            ]
+
+            for pattern in model_dirs:
+                import glob
+                matching_dirs = glob.glob(pattern)
+                if matching_dirs:
+                    config_path = f'{matching_dirs[0]}/config.json'
+                    if os.path.exists(config_path):
+                        import json
+                        with open(config_path, 'r') as f:
+                            config = json.load(f)
+                            feature_set = config.get('feature_set', 'tcn_definitivo')
+                            print(f"🔧 Usando feature_set del config: {feature_set}")
+                        break
+
+            # Crear features con el feature set correcto
+            features = self.features_engine.calculate_features(df, feature_set=feature_set)
             if features.empty:
                 print(f"❌ Error calculando features para {symbol} - {timeframe}")
                 return None
@@ -2287,15 +2356,27 @@ class TCNEnsemblePredictor:
             # Obtener ventana específica para este modelo
             lookback_window = self.get_model_specific_window(symbol, timeframe)
 
+            # 🔧 NUEVO: Validación crítica de dimensiones
+            print(f"🔍 VALIDACIÓN {symbol}-{timeframe}:")
+            print(f"   📊 Features calculadas: {features.shape}")
+            print(f"   📊 Features del modelo: {len(feature_columns)}")
+            print(f"   📊 Ventana requerida: {lookback_window}")
+            print(f"   📊 Datos disponibles: {len(features_scaled)}")
+
+            # Verificar que las dimensiones coinciden EXACTAMENTE
+            if len(feature_columns) != features.shape[1]:
+                print(f"❌ ERROR DIMENSIONAL: Model espera {len(feature_columns)}, got {features.shape[1]}")
+                return None
+
             if len(features_scaled) < lookback_window:
-                print(f"⚠️ Datos insuficientes para {symbol} - {timeframe}: {len(features_scaled)} < {lookback_window}")
+                print(f"❌ ERROR TEMPORAL: Necesita {lookback_window}, got {len(features_scaled)}")
                 return None
 
             # Tomar la última secuencia con la ventana correcta
             sequence = features_scaled[-lookback_window:]
             sequence = sequence.reshape(1, lookback_window, len(feature_columns))
 
-            print(f"✅ Secuencia preparada para {symbol} - {timeframe}: shape={sequence.shape}")
+            print(f"✅ Secuencia final: {sequence.shape}")
             return sequence
 
         except Exception as e:
