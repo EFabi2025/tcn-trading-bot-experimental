@@ -468,7 +468,8 @@ class TCNEnsemblePredictor:
             'ETHUSDT': {'strong_sell': -0.0026, 'weak_sell': -0.0012, 'weak_buy': 0.0013, 'strong_buy': 0.0027},
             'BNBUSDT': {'strong_sell': -0.0015, 'weak_sell': -0.0007, 'weak_buy': 0.0007, 'strong_buy': 0.0015},
             'XRPUSDT': {'strong_sell': -0.0018, 'weak_sell': -0.0009, 'weak_buy': 0.0009, 'strong_buy': 0.0018},
-            'DOTUSDT': {'strong_sell': -0.0020, 'weak_sell': -0.0010, 'weak_buy': 0.0010, 'strong_buy': 0.0020}
+            'DOTUSDT': {'strong_sell': -0.0020, 'weak_sell': -0.0010, 'weak_buy': 0.0010, 'strong_buy': 0.0020},
+            'ADAUSDT': {'strong_sell': -0.0022, 'weak_sell': -0.0011, 'weak_buy': 0.0011, 'strong_buy': 0.0022}
         }
 
         validation_result = {
