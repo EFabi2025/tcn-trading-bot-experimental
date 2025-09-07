@@ -8,6 +8,23 @@ import os
 from typing import Dict, Optional
 from dataclasses import dataclass
 from decimal import Decimal
+from dotenv import load_dotenv
+from pathlib import Path
+
+# ✅ CORREGIDO: Cargar .env desde el directorio raíz del proyecto
+# Obtener la ruta del directorio raíz del proyecto (donde está el archivo .env)
+project_root = Path(__file__).parent.parent
+env_path = project_root / '.env'
+
+# Cargar variables de entorno desde .env
+if env_path.exists():
+    load_dotenv(env_path)
+    print(f"✅ Archivo .env cargado desde: {env_path}")
+else:
+    print(f"⚠️ Archivo .env no encontrado en: {env_path}")
+    # Intentar cargar desde el directorio actual como fallback
+    load_dotenv()
+    print("⚠️ Cargando .env desde directorio actual como fallback")
 
 @dataclass
 class RiskParameters:
@@ -56,8 +73,8 @@ class TradingConfig:
     # ✅ NUEVO: Configuración de Diversificación de Portafolio
     PORTFOLIO_DIVERSIFICATION = {
         # Límites de concentración por símbolo
-        'MAX_SYMBOL_CONCENTRATION_PERCENT': 50.0,  # Máximo 40% del portafolio en un símbolo
-        'MAX_POSITIONS_PER_SYMBOL': 4,             # Máximo 3 posiciones por símbolo
+        'MAX_SYMBOL_CONCENTRATION_PERCENT': 30.0,  # Máximo 40% del portafolio en un símbolo
+        'MAX_POSITIONS_PER_SYMBOL': 3,             # Máximo 3 posiciones por símbolo
         'MIN_SYMBOLS_IN_PORTFOLIO': 2,             # Mínimo 2 símbolos diferentes
 
         # Diversificación por sectores/categorías
@@ -67,9 +84,9 @@ class TradingConfig:
             'BNBUSDT': 'EXCHANGE_TOKEN',
             'XRPUSDT': 'ALT_CRYPTO',         # ✅ INTEGRADO desde repositorio externo
             'DOTUSDT': 'ALT_CRYPTO',         # ✅ ACTIVADO: DOTUSDT disponible
-            # ⏸️ TEMPORALMENTE EXCLUIDOS (sin modelos TCN):
-            # 'ADAUSDT': 'ALT_CRYPTO',
-            # 'SOLUSDT': 'ALT_CRYPTO'
+            'ADAUSDT': 'ALT_CRYPTO',         # ✅ ACTIVADO: ADAUSDT disponible
+            'SOLUSDT': 'ALT_CRYPTO',         # ✅ ACTIVADO: SOLUSDT disponible
+            'POLUSDT': 'ALT_CRYPTO',         # ✅ ACTIVADO: POLUSDT disponible (reemplazo de LINKUSDT)
         },
         'MAX_CATEGORY_CONCENTRATION_PERCENT': 90.0,  # Máximo 60% en una categoría
 
@@ -104,7 +121,11 @@ class TradingConfig:
             'ETHUSDT': 15,  # ETH: 15 minutos entre cambios de señal
             'BTCUSDT': 10,  # BTC: 10 minutos
             'BNBUSDT': 12,  # BNB: 12 minutos
-            'XRPUSDT': 12   # XRP: 12 minutos
+            'XRPUSDT': 12,  # XRP: 12 minutos
+            'DOTUSDT': 12,  # DOT: 12 minutos
+            'ADAUSDT': 12,  # ADA: 12 minutos (nuevo par activado)
+            'SOLUSDT': 12,  # SOL: 12 minutos (nuevo par activado)
+            'LINKUSDT': 12  # LINK: 12 minutos (nuevo par activado)
         },
 
         # ✅ NUEVO: Sistema de Penalidad Bearish Gradual
@@ -149,7 +170,11 @@ class TradingConfig:
             'ETHUSDT': 78.0,  # ETH requiere 78% para cambiar señal
             'BTCUSDT': 75.0,  # BTC requiere 75%
             'BNBUSDT': 72.0,  # BNB requiere 72%
-            'XRPUSDT': 75.0   # XRP requiere 75%
+            'XRPUSDT': 75.0,  # XRP requiere 75%
+            'DOTUSDT': 74.0,  # DOT requiere 74%
+            'ADAUSDT': 75.0,  # ADA requiere 75% (nuevo par activado)
+            'SOLUSDT': 75.0,  # SOL requiere 75% (nuevo par activado)
+            'LINKUSDT': 75.0  # LINK requiere 75% (nuevo par activado)
         },
 
         # Criterios de cierre de posición por símbolo
@@ -191,16 +216,16 @@ class ConfigManager:
             max_daily_loss_percent=float(os.getenv('MAX_DAILY_LOSS_PERCENT', '10.0')),
             max_drawdown_percent=float(os.getenv('MAX_DRAWDOWN_PERCENT', '15.0')),
 
-            stop_loss_percent=float(os.getenv('STOP_LOSS_PERCENT', '1.4')),
+            stop_loss_percent=float(os.getenv('STOP_LOSS_PERCENT', '3.0')),
             take_profit_percent=float(os.getenv('TAKE_PROFIT_PERCENT', '4.0')),
             trailing_stop_percent=float(os.getenv('TRAILING_STOP_PERCENT', '1.4')),
-            min_profit_protection=float(os.getenv('MIN_PROFIT_PROTECTION', '0.9')),  # ✅ NUEVO: Protección mínima de ganancia
-            trailing_activation_threshold=float(os.getenv('TRAILING_ACTIVATION_THRESHOLD', '0.6')),  # ✅ NUEVO: Umbral de activación
+            min_profit_protection=float(os.getenv('MIN_PROFIT_PROTECTION', '1.5')),  # ✅ NUEVO: Protección mínima de ganancia
+            trailing_activation_threshold=float(os.getenv('TRAILING_ACTIVATION_THRESHOLD', '0.5')),  # ✅ NUEVO: Umbral de activación
 
             max_concurrent_positions=int(os.getenv('MAX_CONCURRENT_POSITIONS', '3')),
             correlation_limit=float(os.getenv('CORRELATION_LIMIT', '0.7')),
 
-            min_confidence_threshold=float(os.getenv('MIN_CONFIDENCE_THRESHOLD', '0.70')),
+            min_confidence_threshold=float(os.getenv('MIN_CONFIDENCE_THRESHOLD', '0.95')),  # ✅ AUMENTADO: 0.70 → 0.95 (95% - NO hará trading)
             signal_reversal_threshold=float(os.getenv('SIGNAL_REVERSAL_THRESHOLD', '0.85')),
 
             # min_position_value_usdt se obtiene dinámicamente de Binance

@@ -19,7 +19,7 @@ def test_feature_sets_availability():
     try:
         # 1. Probar motor de features
         print("\n1️⃣ Probando motor de features...")
-        from centralized_features_engine2 import CentralizedFeaturesEngine
+        from centralized_features_engine3 import CentralizedFeaturesEngine
         
         features_engine = CentralizedFeaturesEngine()
         

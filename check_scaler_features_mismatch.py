@@ -18,7 +18,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
 import pandas as pd
 import pickle
-from centralized_features_engine2 import CentralizedFeaturesEngine
+from centralized_features_engine3 import CentralizedFeaturesEngine
 
 def check_scaler_features_mismatch():
     """🔍 Verificar discrepancia entre features de scaler y calculadas"""

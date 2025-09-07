@@ -2,3 +2,11 @@ cd desktop
 cd Binancebot 
 & c:/Users/emman/Desktop/BinanceBot/.venv/Scripts/Activate.ps1 
 python runtradingadaptive.py       
+
+Coomandos para iniciar el bot em ña terminal de windows powershell
+#### solo pegar lo que está despues de > es lo que se debe escribir en la terminal
+ 
+PS C:\Users\emman> cd desktop 
+PS C:\Users\emman\desktop> cd Binancebot
+PS C:\Users\emman\desktop\Binancebot> .venv/Scripts/Activate.ps1
+(.venv) PS C:\Users\emman\desktop\Binancebot> python run_adaptativetrading_v2.py

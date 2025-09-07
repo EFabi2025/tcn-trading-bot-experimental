@@ -307,9 +307,35 @@ class AdvancedRiskManager:
             await self.activate_circuit_breaker("Pérdida diaria máxima alcanzada", 60)
             return False, f"🚨 Pérdida diaria máxima alcanzada: {daily_loss_percent:.1f}%"
 
-        # Verificar máximo número de posiciones
-        if len(self.active_positions) >= self.limits.max_concurrent_positions:
-            return False, f"📊 Máximo de posiciones alcanzado: {len(self.active_positions)}/{self.limits.max_concurrent_positions}"
+        # ✅ VERIFICACIÓN MEJORADA: Máximo número de posiciones con sincronización
+        active_positions_count = len(self.active_positions)
+        
+        # ✅ NUEVO: Verificar sincronización con portfolio manager si está disponible
+        if hasattr(self, 'portfolio_manager') and self.portfolio_manager:
+            try:
+                portfolio_snapshot = await self.portfolio_manager.get_portfolio_snapshot()
+                portfolio_positions_count = len(portfolio_snapshot.active_positions) if portfolio_snapshot else 0
+                
+                if active_positions_count != portfolio_positions_count:
+                    print(f"⚠️ DESINCRONIZACIÓN DETECTADA en verificación de límites:")
+                    print(f"   📊 Risk Manager: {active_positions_count} posiciones")
+                    print(f"   📊 Portfolio Manager: {portfolio_positions_count} posiciones")
+                    
+                    # ✅ CORRECCIÓN: Usar el contador más confiable (portfolio manager)
+                    if portfolio_positions_count >= self.limits.max_concurrent_positions:
+                        return False, f"📊 Máximo de posiciones alcanzado: {portfolio_positions_count}/{self.limits.max_concurrent_positions} (Portfolio Manager)"
+                    else:
+                        print(f"   🔧 Desincronización detectada pero límite no excedido en Portfolio Manager")
+                        # Continuar con la verificación
+                else:
+                    print(f"✅ Sincronización verificada: {active_positions_count} posiciones en ambos contadores")
+            except Exception as e:
+                print(f"⚠️ Error verificando sincronización: {e}")
+                # Continuar con verificación original si hay error
+        
+        # Verificación original del risk manager
+        if active_positions_count >= self.limits.max_concurrent_positions:
+            return False, f"📊 Máximo de posiciones alcanzado: {active_positions_count}/{self.limits.max_concurrent_positions} (Risk Manager)"
 
         # ✅ CORRECCIÓN CRÍTICA: Verificar exposición total usando balance inicial
         # Calcular valor total invertido (dinero gastado originalmente)

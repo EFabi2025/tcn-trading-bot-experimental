@@ -13,7 +13,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from tcn_adaptative_trainer_v2 import TrainingConfig, AdaptiveTCNTrainer
 from tcn_ensemble_predictor import TCNEnsemblePredictor
-from centralized_features_engine2 import CentralizedFeaturesEngine
+from centralized_features_engine3 import CentralizedFeaturesEngine
 
 async def test_feature_sets():
     """🧪 Probar la integración de feature sets optimizados"""
