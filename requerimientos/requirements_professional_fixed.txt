@@ -1,0 +1,46 @@
+# 🚀 PROFESSIONAL TRADING MANAGER REQUIREMENTS (FIXED)
+# Dependencias corregidas para el sistema completo de trading algorítmico
+
+# === CORE DEPENDENCIES ===
+aiohttp>=3.8.0
+aiofiles>=0.8.0
+python-dotenv>=0.19.0
+
+# === DATABASE & ORM ===
+SQLAlchemy>=1.4.0
+aiosqlite>=0.17.0
+
+# === DATA PROCESSING ===
+numpy>=1.21.0
+pandas>=1.4.0
+scipy>=1.7.0
+
+# === MACHINE LEARNING ===
+tensorflow>=2.10.0
+scikit-learn>=1.0.0
+
+# === TECHNICAL ANALYSIS ===
+ta>=0.10.0
+pandas-ta>=0.3.14b
+
+# === CRYPTO & FINANCE ===
+ccxt>=2.0.0
+python-binance>=1.0.15
+websockets>=10.0
+
+# === API & WEB ===
+fastapi>=0.85.0
+uvicorn>=0.18.0
+requests>=2.28.0
+
+# === UTILITIES ===
+pydantic>=1.10.0
+click>=8.0.0
+colorama>=0.4.5
+
+# === TESTING & DEVELOPMENT ===
+pytest>=7.0.0
+pytest-asyncio>=0.19.0
+
+# === SECURITY ===
+cryptography>=37.0.0

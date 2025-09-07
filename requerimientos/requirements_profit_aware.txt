@@ -1,0 +1,19 @@
+# 🎯 REQUISITOS PARA PROFIT-AWARE LOSS
+# =====================================
+
+# Core dependencies
+tensorflow>=2.8.0
+numpy>=1.21.0
+
+# Optional but recommended
+tensorflow-probability>=0.16.0  # Para percentiles más precisos
+
+# Development/testing
+pandas>=1.3.0  # Para manejo de DataFrames
+scikit-learn>=1.0.0  # Para métricas adicionales
+
+# Notas de instalación:
+# pip install -r requirements_profit_aware.txt
+# 
+# Si tensorflow-probability no está disponible:
+# pip install tensorflow numpy pandas scikit-learn

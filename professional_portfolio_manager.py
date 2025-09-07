@@ -46,7 +46,7 @@ class Position:
     trailing_stop_percent: float = 1.4  # Default 1.4% - Configurado desde .env
     highest_price_since_entry: Optional[float] = None  # Para tracking del máximo
     lowest_price_since_entry: Optional[float] = None   # Para shorts
-    trailing_activation_threshold: float = 0.4 # Activar trailing después de +0.4% ganancia
+    trailing_activation_threshold: float = 0.45 # Activar trailing después de +0.4% ganancia
     last_trailing_update: Optional[datetime] = None
     trailing_movements: int = 0  # Contador de movimientos del trailing
 
@@ -96,11 +96,14 @@ class PortfolioSnapshot:
 class ProfessionalPortfolioManager:
     """🏛️ Gestor profesional de portafolio con TCN y trailing stops avanzados"""
 
-    def __init__(self, api_key: str, secret_key: str, base_url: str = "https://testnet.binance.vision"):
+    def __init__(self, api_key: str, secret_key: str, base_url: str = "https://testnet.binance.vision", discord_notifier=None):
         self.api_key = api_key
         self.secret_key = secret_key
         self.base_url = base_url
         self.session = aiohttp.ClientSession()
+        
+        # ✅ NUEVO: Discord Notifier para trailing stop
+        self.discord_notifier = discord_notifier
 
         # ✅ NUEVO: Registry persistente de posiciones
         self.position_registry: Dict[str, Position] = {}  # order_id -> Position
@@ -122,11 +125,20 @@ class ProfessionalPortfolioManager:
         # Timestamps
         self.last_snapshot_time = None
 
+        self.trailing_state_cache_file = Path("trailing_states.json")
+        self.trailing_state_cache = self._load_trailing_cache()
+
+        # ✅ NUEVO: Cache de validez de símbolos
+        self._symbol_validity_cache = {}
+        self._last_cache_refresh = None
+        self._cache_refresh_interval = 3600  # Refrescar cada hora
+
         print(f"✅ ProfessionalPortfolioManager inicializado")
         print(f"   📊 Max posiciones: {self.max_positions}")
         print(f"   💰 Valor mínimo por posición: ${self.min_position_value}")
         print(f"   📅 Días de historial: {self.days_to_lookback}")
         print(f"   🗂️ Registry de posiciones: Inicializado")
+        print(f"   🔍 Cache de símbolos válidos: Inicializado")
 
         # Configuración de timeouts y límites
         self.request_timeout = 10
@@ -142,9 +154,6 @@ class ProfessionalPortfolioManager:
         self.orders_cache = {}
         self.last_orders_update = None
 
-        self.trailing_state_cache_file = Path("trailing_states.json")
-        self.trailing_state_cache = self._load_trailing_cache()
-
     def _generate_signature(self, params: str) -> str:
         """🔐 Generar firma HMAC SHA256 para Binance"""
         return hmac.new(
@@ -154,38 +163,79 @@ class ProfessionalPortfolioManager:
         ).hexdigest()
 
     async def _make_authenticated_request(self, endpoint: str, params: Optional[Dict] = None) -> Dict:
-        """🔗 Realizar petición autenticada a Binance"""
+        """🔗 Realizar petición autenticada a Binance con manejo robusto de errores de timestamp"""
         if params is None:
             params = {}
 
-        # Añadir timestamp y recvWindow
-        params['timestamp'] = int(time.time() * 1000)
-        params['recvWindow'] = 10000  # Aumentar la ventana a 10 segundos
+        # ✅ NUEVO: Configuración dinámica de recvWindow
+        base_recv_window = getattr(self, '_time_adjusted_recv_window', 30000)  # Usar valor ajustado si está disponible
+        max_retries = 3
+        current_retry = 0
 
-        # Crear query string
-        query_string = '&'.join([f"{key}={value}" for key, value in params.items()])
+        while current_retry < max_retries:
+            try:
+                # Añadir timestamp y recvWindow dinámico
+                params['timestamp'] = int(time.time() * 1000)
+                
+                # ✅ NUEVO: Aumentar recvWindow progresivamente en cada reintento
+                recv_window = base_recv_window + (current_retry * 15000)  # +15s por reintento
+                params['recvWindow'] = recv_window
 
-        # Generar firma
-        signature = self._generate_signature(query_string)
-        query_string += f"&signature={signature}"
+                # Crear query string
+                query_string = '&'.join([f"{key}={value}" for key, value in params.items()])
 
-        # Headers
-        headers = {
-            'X-MBX-APIKEY': self.api_key
-        }
+                # Generar firma
+                signature = self._generate_signature(query_string)
+                query_string += f"&signature={signature}"
 
-        # Realizar petición
-        url = f"{self.base_url}/api/v3/{endpoint}?{query_string}"
+                # Headers
+                headers = {
+                    'X-MBX-APIKEY': self.api_key
+                }
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers) as response:
-                self.api_calls_count += 1
+                # Realizar petición
+                url = f"{self.base_url}/api/v3/{endpoint}?{query_string}"
 
-                if response.status == 200:
-                    return await response.json()
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url, headers=headers) as response:
+                        self.api_calls_count += 1
+
+                        if response.status == 200:
+                            return await response.json()
+                        else:
+                            error_text = await response.text()
+                            
+                            # ✅ NUEVO: Manejo específico de error de timestamp
+                            if "code\":-1021" in error_text:
+                                current_retry += 1
+                                if current_retry < max_retries:
+                                    print(f"⚠️ Error de timestamp (-1021) para {endpoint}, reintentando con recvWindow={recv_window}ms...")
+                                    # Esperar un poco antes del reintento
+                                    await asyncio.sleep(0.5)
+                                    continue
+                                else:
+                                    print(f"❌ Error de timestamp persistente después de {max_retries} reintentos")
+                                    raise Exception(f"Error API Binance: {response.status} - {error_text}")
+                            else:
+                                raise Exception(f"Error API Binance: {response.status} - {error_text}")
+
+            except Exception as e:
+                # ✅ NUEVO: Manejo específico de errores de timestamp en excepciones
+                if "code\":-1021" in str(e) or "Timestamp for this request is outside of the recvWindow" in str(e):
+                    current_retry += 1
+                    if current_retry < max_retries:
+                        print(f"⚠️ Error de timestamp detectado, reintentando {current_retry}/{max_retries}...")
+                        await asyncio.sleep(0.5)
+                        continue
+                    else:
+                        print(f"❌ Error de timestamp persistente después de {max_retries} reintentos")
+                        raise e
                 else:
-                    error_text = await response.text()
-                    raise Exception(f"Error API Binance: {response.status} - {error_text}")
+                    # Otros errores se propagan inmediatamente
+                    raise e
+
+        # Si llegamos aquí, todos los reintentos fallaron
+        raise Exception(f"Error de timestamp persistente después de {max_retries} reintentos")
 
     async def get_current_price(self, symbol: str) -> float:
         """💲 Obtener precio actual de un símbolo"""
@@ -259,12 +309,20 @@ class ProfessionalPortfolioManager:
                 total = free + locked
 
                 if total > 0:  # Solo activos con balance > 0
+                    # ✅ NUEVO: Verificar que el símbolo sea válido para activos no-USDT
+                    if asset != 'USDT':
+                        symbol = f"{asset}USDT"
+                        if not await self._is_valid_symbol(symbol):
+                            print(f"⚠️ Símbolo inválido detectado en balances: {symbol} (asset: {asset}), omitiendo...")
+                            continue
+                    
                     balances[asset] = {
                         'free': free,
                         'locked': locked,
                         'total': total
                     }
 
+            print(f"✅ Balances obtenidos: {len(balances)} activos válidos")
             return balances
 
         except Exception as e:
@@ -283,6 +341,11 @@ class ProfessionalPortfolioManager:
             orders = []
 
             if symbol:
+                # Verificar que el símbolo sea válido antes de hacer la llamada
+                if not await self._is_valid_symbol(symbol):
+                    print(f"⚠️ Símbolo inválido detectado: {symbol}, omitiendo...")
+                    return []
+                
                 # Obtener órdenes para un símbolo específico
                 params = {
                     'symbol': symbol,
@@ -290,40 +353,139 @@ class ProfessionalPortfolioManager:
                     'limit': 1000  # Máximo por request
                 }
 
-                data = await self._make_authenticated_request("allOrders", params)
-
-                for order in data:
-                    if order['status'] == 'FILLED':  # Solo órdenes ejecutadas
-                        trade_order = TradeOrder(
-                            order_id=str(order['orderId']),
-                            symbol=order['symbol'],
-                            side=order['side'],
-                            quantity=float(order['origQty']),
-                            price=float(order['price']) if order['price'] != '0.00000000' else float(order['cummulativeQuoteQty']) / float(order['executedQty']),
-                            executed_qty=float(order['executedQty']),
-                            cumulative_quote_qty=float(order['cummulativeQuoteQty']),
-                            time=datetime.fromtimestamp(order['time'] / 1000),
-                            status=order['status']
-                        )
-                        orders.append(trade_order)
+                try:
+                    data = await self._make_authenticated_request("allOrders", params)
+                    
+                    for order in data:
+                        if order['status'] == 'FILLED':  # Solo órdenes ejecutadas
+                            trade_order = TradeOrder(
+                                order_id=str(order['orderId']),
+                                symbol=order['symbol'],
+                                side=order['side'],
+                                quantity=float(order['origQty']),
+                                price=float(order['price']) if order['price'] != '0.00000000' else float(order['cummulativeQuoteQty']) / float(order['executedQty']),
+                                executed_qty=float(order['executedQty']),
+                                cumulative_quote_qty=float(order['cummulativeQuoteQty']),
+                                time=datetime.fromtimestamp(order['time'] / 1000),
+                                status=order['status']
+                            )
+                            orders.append(trade_order)
+                except Exception as e:
+                    if "Invalid symbol" in str(e):
+                        print(f"⚠️ Símbolo inválido: {symbol}, omitiendo...")
+                        return []
+                    else:
+                        raise e
             else:
-                # Obtener órdenes para todos los símbolos activos
+                # Obtener balances y filtrar símbolos válidos
                 balances = await self.get_account_balances()
-
+                
+                # Filtrar solo símbolos válidos antes de procesar
+                valid_symbols = []
                 for asset in balances.keys():
                     if asset != 'USDT':
-                        try:
-                            symbol_orders = await self.get_order_history(f"{asset}USDT", days_back)
-                            orders.extend(symbol_orders)
-                        except Exception as e:
-                            print(f"⚠️ Error obteniendo órdenes para {asset}USDT: {e}")
-                            continue
+                        symbol = f"{asset}USDT"
+                        if await self._is_valid_symbol(symbol):
+                            valid_symbols.append(symbol)
+                        else:
+                            print(f"⚠️ Símbolo inválido detectado en balances: {symbol}, omitiendo...")
+                
+                print(f"🔍 Procesando {len(valid_symbols)} símbolos válidos de {len([k for k in balances.keys() if k != 'USDT'])} totales")
+                
+                # Procesar solo símbolos válidos
+                for symbol in valid_symbols:
+                    try:
+                        symbol_orders = await self.get_order_history(symbol, days_back)
+                        orders.extend(symbol_orders)
+                    except Exception as e:
+                        print(f"⚠️ Error obteniendo órdenes para {symbol}: {e}")
+                        continue
 
             return sorted(orders, key=lambda x: x.time, reverse=True)
 
         except Exception as e:
             print(f"❌ Error obteniendo historial de órdenes: {e}")
             return []
+
+    async def _is_valid_symbol(self, symbol: str) -> bool:
+        """🔍 Verificar si un símbolo es válido en Binance"""
+        try:
+            # ✅ NUEVO: Cache local para evitar verificaciones repetidas
+            if hasattr(self, '_symbol_validity_cache'):
+                if symbol in self._symbol_validity_cache:
+                    return self._symbol_validity_cache[symbol]
+            else:
+                self._symbol_validity_cache = {}
+            
+            # ✅ NUEVO: Lista de activos conocidos que pueden tener balance pero no ser símbolos de trading
+            non_trading_assets = {
+                'BUSD', 'TUSD', 'USDC', 'DAI', 'PAX', 'BKRW', 'BIDR', 'BVND', 'BZRX', 'BTT',
+                'WIN', 'CHR', 'COS', 'CTXC', 'DUSK', 'ERD', 'FET', 'FTM', 'GTO', 'HOT',
+                'KEY', 'LTC', 'NEO', 'ONG', 'ONT', 'QTUM', 'RLC', 'STEEM', 'STMX',
+                'TFUEL', 'THETA', 'TRX', 'VET', 'VTHO', 'WAVES', 'WRX', 'XRP', 'ZEN', 'ZIL'
+            }
+            
+            # Extraer el asset del símbolo
+            asset = symbol.replace('USDT', '')
+            
+            # Si es un activo conocido que puede tener balance pero no ser símbolo de trading activo
+            if asset in non_trading_assets:
+                # Verificar si realmente existe como símbolo de trading
+                pass  # Continuar con la verificación normal
+            else:
+                # Para activos menos comunes, hacer verificación más estricta
+                pass
+            
+            # Intentar obtener información del símbolo usando ticker24hr (más eficiente)
+            try:
+                params = {'symbol': symbol}
+                await self._make_authenticated_request("ticker24hr", params)
+                self._symbol_validity_cache[symbol] = True
+                return True
+            except Exception as e:
+                if "Invalid symbol" in str(e) or "code\":-1121" in str(e):
+                    self._symbol_validity_cache[symbol] = False
+                    return False
+                # Para otros errores, intentar con exchangeInfo como fallback
+                try:
+                    await self._make_authenticated_request("exchangeInfo", {})
+                    self._symbol_validity_cache[symbol] = True
+                    return True
+                except Exception as e2:
+                    if "Invalid symbol" in str(e2) or "code\":-1121" in str(e2):
+                        self._symbol_validity_cache[symbol] = False
+                        return False
+                    # Para otros errores, asumir que el símbolo es válido (problemas de red, etc.)
+                    self._symbol_validity_cache[symbol] = True
+                    return True
+                    
+        except Exception as e:
+            print(f"⚠️ Error verificando validez del símbolo {symbol}: {e}")
+            # En caso de error, asumir que es válido para no bloquear operaciones
+            return True
+
+    def _clear_symbol_validity_cache(self):
+        """🧹 Limpiar cache de validez de símbolos"""
+        if hasattr(self, '_symbol_validity_cache'):
+            self._symbol_validity_cache.clear()
+            print("🧹 Cache de validez de símbolos limpiado")
+
+    async def _refresh_symbol_validity_cache(self):
+        """🔄 Refrescar cache de validez de símbolos (ejecutar periódicamente)"""
+        try:
+            print("🔄 Refrescando cache de validez de símbolos...")
+            self._clear_symbol_validity_cache()
+            
+            # Obtener balances actuales y verificar símbolos
+            balances = await self.get_account_balances()
+            for asset in balances.keys():
+                if asset != 'USDT':
+                    symbol = f"{asset}USDT"
+                    await self._is_valid_symbol(symbol)
+            
+            print(f"✅ Cache refrescado con {len(self._symbol_validity_cache)} símbolos")
+        except Exception as e:
+            print(f"⚠️ Error refrescando cache de símbolos: {e}")
 
     def group_orders_into_positions(self, orders: List[TradeOrder], current_balances: Dict[str, Dict]) -> List[Position]:
         """🔄 Agrupar órdenes en posiciones individuales usando FIFO"""
@@ -415,6 +577,13 @@ class ProfessionalPortfolioManager:
         """📊 Obtener snapshot completo del portafolio - ✅ MEJORADO: Con persistencia de posiciones"""
         try:
             print("📊 Obteniendo snapshot del portafolio...")
+
+            # ✅ NUEVO: Verificar si necesitamos refrescar el cache de símbolos válidos
+            if (self._last_cache_refresh is None or 
+                (datetime.now() - self._last_cache_refresh).total_seconds() > self._cache_refresh_interval):
+                print("🔄 Refrescando cache de símbolos válidos...")
+                await self._refresh_symbol_validity_cache()
+                self._last_cache_refresh = datetime.now()
 
             # 1. Obtener balances
             balances = await self.get_account_balances()
@@ -629,34 +798,46 @@ class ProfessionalPortfolioManager:
     # ✅ NUEVO: Sistema de Trailing Stop Profesional
 
     def _save_trailing_state(self, position: Position):
-        """💾 Guardar estado del trailing stop en cache"""
+        """💾 Guardar estado del trailing stop en cache - AISLADO POR ORDER_ID"""
         try:
-            if position.order_id:
-                self.trailing_cache[position.order_id] = {
-                    'trailing_stop_active': position.trailing_stop_active,
-                    'trailing_stop_price': position.trailing_stop_price,
-                    'highest_price_since_entry': position.highest_price_since_entry,
-                    'lowest_price_since_entry': position.lowest_price_since_entry,
-                    'trailing_movements': position.trailing_movements,
-                    'last_trailing_update': position.last_trailing_update.isoformat() if position.last_trailing_update else None,
-                    'symbol': position.symbol,  # Para debugging
-                    'entry_price': position.entry_price  # Para validación
-                }
+            # ✅ VALIDACIÓN CRÍTICA: Verificar que la posición tenga order_id único
+            if not position.order_id:
+                print(f"❌ ERROR CRÍTICO: No se puede guardar trailing para {position.symbol}: Sin order_id")
+                return
+            
+            # ✅ AISLAMIENTO CRÍTICO: Verificar que no haya interferencia con otras posiciones
+            if hasattr(self, 'position_registry') and self.position_registry:
+                same_symbol_positions = [pos for pos in self.position_registry.values() if pos.symbol == position.symbol]
+                if len(same_symbol_positions) > 1:
+                    print(f"   ⚠️ ADVERTENCIA: {len(same_symbol_positions)} posiciones del mismo símbolo detectadas")
+                    print(f"   🔍 Posiciones activas: {[f'Pos#{pos.order_id}' for pos in same_symbol_positions]}")
+                    print(f"   🎯 Guardando SOLO: Pos #{position.order_id}")
+            
+            # ✅ GUARDADO AISLADO: Solo para esta posición específica
+            self.trailing_cache[position.order_id] = {
+                'trailing_stop_active': position.trailing_stop_active,
+                'trailing_stop_price': position.trailing_stop_price,
+                'highest_price_since_entry': position.highest_price_since_entry,
+                'lowest_price_since_entry': position.lowest_price_since_entry,
+                'trailing_movements': position.trailing_movements,
+                'last_trailing_update': position.last_trailing_update.isoformat() if position.last_trailing_update else None,
+                'symbol': position.symbol,  # Para debugging
+                'entry_price': position.entry_price,  # Para validación
+                'order_id': position.order_id  # ✅ NUEVO: Asegurar aislamiento completo
+            }
 
-                # ✅ PERSISTENCIA: Guardar inmediatamente en archivo
-                self._save_trailing_cache()
+            # ✅ PERSISTENCIA: Guardar inmediatamente en archivo
+            self._save_trailing_cache()
 
-                # ✅ NUEVO: Logging detallado para debugging
-                if position.trailing_stop_active:
-                    protection = ((position.trailing_stop_price - position.entry_price) / position.entry_price) * 100 if position.trailing_stop_price else 0
-                    print(f"💾 TRAILING GUARDADO {position.symbol} Pos #{position.order_id}:")
-                    print(f"   📈 Estado: ACTIVO ${position.trailing_stop_price:.4f} (+{protection:.2f}%)")
-                    print(f"   🏔️ Máximo: ${position.highest_price_since_entry:.4f}")
-                    print(f"   📊 Movimientos: {position.trailing_movements}")
-                else:
-                    print(f"💾 TRAILING GUARDADO {position.symbol} Pos #{position.order_id}: INACTIVO")
+            # ✅ NUEVO: Logging detallado para debugging
+            if position.trailing_stop_active:
+                protection = ((position.trailing_stop_price - position.entry_price) / position.entry_price) * 100 if position.trailing_stop_price else 0
+                print(f"💾 TRAILING GUARDADO {position.symbol} Pos #{position.order_id}:")
+                print(f"   📈 Estado: ACTIVO ${position.trailing_stop_price:.4f} (+{protection:.2f}%)")
+                print(f"   🏔️ Máximo: ${position.highest_price_since_entry:.4f}")
+                print(f"   📊 Movimientos: {position.trailing_movements}")
             else:
-                print(f"⚠️ No se puede guardar trailing para {position.symbol}: Sin order_id")
+                print(f"💾 TRAILING GUARDADO {position.symbol} Pos #{position.order_id}: INACTIVO")
 
         except Exception as e:
             print(f"❌ Error guardando estado trailing para {position.symbol}: {e}")
@@ -715,7 +896,7 @@ class ProfessionalPortfolioManager:
             stop_loss_percent = float(os.getenv('STOP_LOSS_PERCENT', '1.4'))
             take_profit_percent = float(os.getenv('TAKE_PROFIT_PERCENT', '4.0'))
             trailing_stop_percent = float(os.getenv('TRAILING_STOP_PERCENT', '1.4'))
-            trailing_activation_threshold = float(os.getenv('TRAILING_ACTIVATION_THRESHOLD', '0.4'))
+            trailing_activation_threshold = float(os.getenv('TRAILING_ACTIVATION_THRESHOLD', '0.45'))
 
             # Actualizar los valores de la posición con la configuración
             position.stop_loss_percent = stop_loss_percent
@@ -771,21 +952,28 @@ class ProfessionalPortfolioManager:
         """
         📈 Sistema profesional de Trailing Stop por posición individual.
         Lógica simplificada y robusta para mayor fiabilidad.
+        
+        ✅ AISLAMIENTO COMPLETO: Cada posición se maneja independientemente por order_id
         """
         try:
             stop_triggered = False
             trigger_reason = ""
 
+            # ✅ VALIDACIÓN CRÍTICA: Verificar que la posición tenga order_id único
+            if not position.order_id:
+                print(f"❌ ERROR CRÍTICO: Posición {position.symbol} sin order_id - Saltando trailing stop")
+                return position, False, ""
+            
             # ✅ VALIDACIÓN: Verificar que el precio sea válido
             if current_price <= 0:
-                print(f"⚠️ Precio inválido para {position.symbol}: ${current_price:.4f} - Saltando trailing stop")
+                print(f"⚠️ Precio inválido para {position.symbol} Pos #{position.order_id}: ${current_price:.4f} - Saltando trailing stop")
                 return position, False, ""
 
             # ✅ VALIDACIÓN: Verificar que el precio no sea demasiado diferente del último conocido
             if hasattr(position, 'current_price') and position.current_price > 0:
                 price_change_percent = abs((current_price - position.current_price) / position.current_price) * 100
                 if price_change_percent > 10:  # Cambio > 10% podría ser error
-                    print(f"⚠️ Cambio de precio sospechoso para {position.symbol}: {price_change_percent:.2f}% - Verificando...")
+                    print(f"⚠️ Cambio de precio sospechoso para {position.symbol} Pos #{position.order_id}: {price_change_percent:.2f}% - Verificando...")
                     # Usar el precio más conservador para trailing stops
                     if position.side == 'BUY':
                         current_price = min(current_price, position.current_price)
@@ -796,6 +984,26 @@ class ProfessionalPortfolioManager:
             risk_params = get_risk_params()
             activation_pnl_percent = risk_params.trailing_activation_threshold
             trailing_percent = position.trailing_stop_percent
+            min_profit_protection = risk_params.min_profit_protection
+            
+            # ✅ DEBUGGING CRÍTICO: Información detallada de activación
+            print(f"🔍 DEBUG TRAILING STOP {position.symbol} Pos #{position.order_id}:")
+            print(f"   🆔 Order ID: {position.order_id}")
+            print(f"   💰 Precio entrada: ${position.entry_price:.4f}")
+            print(f"   📊 Precio actual: ${current_price:.4f}")
+            print(f"   ⚙️ Umbral activación: {activation_pnl_percent}%")
+            print(f"   📈 Trailing activo: {position.trailing_stop_active}")
+            print(f"   🎯 Distancia trailing: {trailing_percent}%")
+            print(f"   🏔️ Precio máximo: {position.highest_price_since_entry}")
+            print(f"   🔧 Min profit protection: {min_profit_protection}%")
+            
+            # ✅ AISLAMIENTO CRÍTICO: Verificar que no haya interferencia con otras posiciones del mismo símbolo
+            if hasattr(self, 'position_registry') and self.position_registry:
+                same_symbol_positions = [pos for pos in self.position_registry.values() if pos.symbol == position.symbol]
+                if len(same_symbol_positions) > 1:
+                    print(f"   ⚠️ ADVERTENCIA: {len(same_symbol_positions)} posiciones del mismo símbolo detectadas")
+                    print(f"   🔍 Posiciones activas: {[f'Pos#{pos.order_id}' for pos in same_symbol_positions]}")
+                    print(f"   🎯 Procesando SOLO: Pos #{position.order_id}")
 
             if position.side == 'BUY':
                 # --- LÓGICA PARA POSICIONES LONG ---
@@ -809,7 +1017,11 @@ class ProfessionalPortfolioManager:
 
                 # 2. Calcular PnL actual
                 current_pnl_percent = ((current_price - position.entry_price) / position.entry_price) * 100
-
+                
+                # ✅ DEBUGGING CRÍTICO: PnL y condición de activación
+                print(f"   📊 PnL actual: {current_pnl_percent:.3f}%")
+                print(f"   🔍 Condición activación: {current_pnl_percent:.3f}% >= {activation_pnl_percent}% = {current_pnl_percent >= activation_pnl_percent}")
+                
                 # 3. Activar el trailing stop si se alcanza el umbral de ganancia
                 if not position.trailing_stop_active and current_pnl_percent >= activation_pnl_percent:
                     position.trailing_stop_active = True
@@ -818,12 +1030,11 @@ class ProfessionalPortfolioManager:
                     current_gain_percent = ((position.highest_price_since_entry - position.entry_price) / position.entry_price) * 100
 
                     # ✅ PROTECCIÓN PROPORCIONAL INTELIGENTE (80% de la ganancia actual)
-                    if current_gain_percent >= 0.6:
+                    if current_gain_percent >= 0.4:
                         # Proteger el 80% de la ganancia actual
-                        min_profit_protection = current_gain_percent * 0.9
+                        min_profit_protection = current_gain_percent * 0.70
                     else:
                         # Protección mínima base configurable desde .env
-                        risk_params = get_risk_params()
                         min_profit_protection = risk_params.min_profit_protection
 
                     min_trailing_price = position.entry_price * (1 + min_profit_protection / 100)
@@ -835,7 +1046,15 @@ class ProfessionalPortfolioManager:
                     position.trailing_stop_price = max(trailing_from_peak, min_trailing_price)
 
                     position.last_trailing_update = datetime.now()
+                    
+                    # ✅ AISLAMIENTO CRÍTICO: Guardar estado solo para esta posición específica
                     self._save_trailing_state(position)
+                    
+                    # ✅ VERIFICACIÓN: Confirmar que el estado se guardó correctamente para esta posición
+                    if hasattr(self, 'trailing_cache') and position.order_id in self.trailing_cache:
+                        print(f"   ✅ Estado de trailing guardado para Pos #{position.order_id}")
+                    else:
+                        print(f"   ⚠️ Estado de trailing NO se guardó para Pos #{position.order_id}")
 
                     protection_percent = ((position.trailing_stop_price - position.entry_price) / position.entry_price) * 100
                     print(f"📈 TRAILING STOP ACTIVADO para {position.symbol} Pos #{position.order_id}:")
@@ -844,6 +1063,19 @@ class ProfessionalPortfolioManager:
                     print(f"   🏔️ Precio máximo: ${position.highest_price_since_entry:.4f}")
                     print(f"   🎯 Ganancia actual: +{current_pnl_percent:.2f}% (Umbral: {activation_pnl_percent}%)")
                     print(f"   🚀 Stop inicial en: ${position.trailing_stop_price:.4f} (+{protection_percent:.2f}%)")
+                    
+                    # ✅ NUEVO: Notificación Discord para activación de trailing stop
+                    self._schedule_trailing_stop_notification(position, current_pnl_percent, activation_pnl_percent, protection_percent)
+
+                # ✅ DEBUGGING CRÍTICO: Por qué NO se activa el trailing
+                elif not position.trailing_stop_active:
+                    print(f"   ⏸️ TRAILING STOP NO ACTIVADO para {position.symbol}:")
+                    print(f"      📊 PnL actual: {current_pnl_percent:.3f}% < Umbral: {activation_pnl_percent}%")
+                    print(f"      🎯 Faltan: {activation_pnl_percent - current_pnl_percent:.3f}% para activar")
+                    if current_pnl_percent > 0:
+                        print(f"      💡 Posición en ganancia pero por debajo del umbral")
+                    else:
+                        print(f"      💡 Posición en pérdida: {current_pnl_percent:.3f}%")
 
                 # 4. ✅ CORREGIDO: Actualizar el trailing stop si ya está activo
                 elif position.trailing_stop_active:
@@ -851,12 +1083,11 @@ class ProfessionalPortfolioManager:
                     current_gain_percent = ((position.highest_price_since_entry - position.entry_price) / position.entry_price) * 100
 
                     # ✅ PROTECCIÓN PROPORCIONAL INTELIGENTE (80% de la ganancia actual)
-                    if current_gain_percent >= 0.6:
+                    if current_gain_percent >= 0.4:
                         # Proteger el 80% de la ganancia actual
-                        min_profit_protection = current_gain_percent * 0.90
+                        min_profit_protection = current_gain_percent * 0.70
                     else:
                         # Protección mínima base configurable desde .env
-                        risk_params = get_risk_params()
                         min_profit_protection = risk_params.min_profit_protection
 
                     min_trailing_price = position.entry_price * (1 + min_profit_protection / 100)
@@ -882,7 +1113,7 @@ class ProfessionalPortfolioManager:
                         print(f"   🏔️ Precio máximo: ${position.highest_price_since_entry:.4f}")
                         print(f"   🔄 Stop: ${old_price:.4f} → ${new_trailing_price:.4f}")
                         print(f"   🛡️ Protegiendo ganancia de: +{profit_protection_percent:.2f}%")
-                        print(f"   📊 Protección proporcional: +{min_profit_protection:.1f}% (80% de +{current_gain_percent:.2f}%)")
+                        print(f"   📊 Protección proporcional: +{min_profit_protection:.1f}% (75% de +{current_gain_percent:.2f}%)")
                     else:
                         # ✅ NUEVO: Log detallado cuando el trailing no se mueve
                         if position.trailing_stop_price is not None:
@@ -899,6 +1130,9 @@ class ProfessionalPortfolioManager:
                     print(f"🛑 TRAILING STOP EJECUTADO para {position.symbol} Pos #{position.order_id}:")
                     print(f"   📉 Precio actual: ${current_price:.4f} <= Stop: ${position.trailing_stop_price:.4f}")
                     print(f"   💰 PnL final estimado: {final_pnl:.2f}%")
+                    
+                    # ✅ NUEVO: Notificación Discord para ejecución de trailing stop
+                    self._schedule_trailing_stop_execution_notification(position, current_price, final_pnl)
 
                     # Limpiar estado del cache
                     if position.order_id in self.trailing_cache:
@@ -925,12 +1159,11 @@ class ProfessionalPortfolioManager:
                     current_gain_percent = ((position.entry_price - position.lowest_price_since_entry) / position.entry_price) * 100
 
                     # ✅ PROTECCIÓN PROPORCIONAL INTELIGENTE (80% de la ganancia actual)
-                    if current_gain_percent >= 0.6:
+                    if current_gain_percent >= 0.4:
                         # Proteger el 80% de la ganancia actual
-                        min_profit_protection = current_gain_percent * 0.9
+                        min_profit_protection = current_gain_percent * 0.70
                     else:
                         # Protección mínima base configurable desde .env
-                        risk_params = get_risk_params()
                         min_profit_protection = risk_params.min_profit_protection
 
                     min_trailing_price = position.entry_price * (1 - min_profit_protection / 100)
@@ -951,6 +1184,9 @@ class ProfessionalPortfolioManager:
                     print(f"   📉 Precio mínimo: ${position.lowest_price_since_entry:.4f}")
                     print(f"   🎯 Ganancia actual: +{current_pnl_percent:.2f}% (Umbral: {activation_pnl_percent}%)")
                     print(f"   🚀 Stop inicial en: ${position.trailing_stop_price:.4f} (+{protection_percent:.2f}%)")
+                    
+                    # ✅ NUEVO: Notificación Discord para activación de trailing stop SHORT
+                    self._schedule_trailing_stop_notification(position, current_pnl_percent, activation_pnl_percent, protection_percent, is_short=True)
 
                 # 4. ✅ CORREGIDO: Actualizar el trailing stop si ya está activo
                 elif position.trailing_stop_active:
@@ -958,12 +1194,11 @@ class ProfessionalPortfolioManager:
                     current_gain_percent = ((position.entry_price - position.lowest_price_since_entry) / position.entry_price) * 100
 
                     # ✅ PROTECCIÓN PROPORCIONAL INTELIGENTE (80% de la ganancia actual)
-                    if current_gain_percent >= 0.6:
+                    if current_gain_percent >= 0.4:
                         # Proteger el 80% de la ganancia actual
-                        min_profit_protection = current_gain_percent * 0.90
+                        min_profit_protection = current_gain_percent * 0.70
                     else:
                         # Protección mínima base configurable desde .env
-                        risk_params = get_risk_params()
                         min_profit_protection = risk_params.min_profit_protection
 
                     min_trailing_price = position.entry_price * (1 - min_profit_protection / 100)
@@ -989,7 +1224,7 @@ class ProfessionalPortfolioManager:
                         print(f"   📉 Precio mínimo: ${position.lowest_price_since_entry:.4f}")
                         print(f"   🔄 Stop: ${old_price:.4f} → ${new_trailing_price:.4f}")
                         print(f"   🛡️ Protegiendo ganancia de: +{profit_protection_percent:.2f}%")
-                        print(f"   📊 Protección proporcional: +{min_profit_protection:.1f}% (80% de +{current_gain_percent:.2f}%)")
+                        print(f"   📊 Protección proporcional: +{min_profit_protection:.1f}% (75% de +{current_gain_percent:.2f}%)")
                     else:
                         # ✅ NUEVO: Log detallado cuando el trailing no se mueve
                         if position.trailing_stop_price is not None:
@@ -1006,6 +1241,9 @@ class ProfessionalPortfolioManager:
                     print(f"🛑 TRAILING STOP (SHORT) EJECUTADO para {position.symbol} Pos #{position.order_id}:")
                     print(f"   📈 Precio actual: ${current_price:.4f} >= Stop: ${position.trailing_stop_price:.4f}")
                     print(f"   💰 PnL final estimado: {final_pnl:.2f}%")
+                    
+                    # ✅ NUEVO: Notificación Discord para ejecución de trailing stop SHORT
+                    self._schedule_trailing_stop_execution_notification(position, current_price, final_pnl, is_short=True)
 
                     # Limpiar estado del cache
                     if position.order_id in self.trailing_cache:
@@ -1022,10 +1260,23 @@ class ProfessionalPortfolioManager:
                     trigger_reason = "STOP_LOSS"
                     print(f"🛑 STOP LOSS TRADICIONAL (SHORT) para {position.symbol}")
 
+            # ✅ DEBUGGING FINAL: Resumen del estado después del update
+            print(f"📋 RESUMEN TRAILING STOP {position.symbol}:")
+            print(f"   🔄 Estado final: {'ACTIVO' if position.trailing_stop_active else 'INACTIVO'}")
+            if position.trailing_stop_active and position.trailing_stop_price:
+                protection_pct = ((position.trailing_stop_price - position.entry_price) / position.entry_price) * 100
+                print(f"   💰 Stop price: ${position.trailing_stop_price:.4f} (+{protection_pct:.2f}%)")
+                print(f"   📊 Movimientos: {position.trailing_movements}")
+            if stop_triggered:
+                print(f"   🛑 STOP TRIGGERED: {trigger_reason}")
+            print(f"   ─────────────────────────────────────")
+            
             return position, stop_triggered, trigger_reason
 
         except Exception as e:
             print(f"❌ Error en trailing stop para {position.symbol}: {e}")
+            import traceback
+            print(f"🔍 Traceback: {traceback.format_exc()}")
             return position, False, ""
 
     def get_atr_based_trailing_distance(self, symbol: str, periods: int = 14) -> float:
@@ -1035,10 +1286,10 @@ class ProfessionalPortfolioManager:
             # Por ahora, usar porcentajes adaptativos según el activo
 
             atr_multipliers = {
-                'BTC': 1.5,    # Menos volátil, trailing más cercano
-                'ETH': 2.0,    # Volatilidad media
-                'BNB': 2.5,    # Más volátil, trailing más amplio
-                'ADA': 3.0,    # Altcoin más volátil
+                'BTC': 1.0,    # Menos volátil, trailing más cercano
+                'ETH': 1.5,    # Volatilidad media
+                'BNB': 2.0,    # Más volátil, trailing más amplio
+                'ADA': 2.5,    # Altcoin más volátil
                 'default': 2.0
             }
 
@@ -1250,6 +1501,194 @@ class ProfessionalPortfolioManager:
 
         except Exception as e:
             print(f"❌ Error actualizando precios de posiciones: {e}")
+
+    def _schedule_trailing_stop_notification(self, position: Position, current_pnl_percent: float, 
+                                            activation_threshold: float, protection_percent: float, 
+                                            is_short: bool = False):
+        """📢 Programar notificación Discord cuando se activa el trailing stop"""
+        try:
+            if not self.discord_notifier:
+                print("⚠️ Discord notifier no disponible para trailing stop")
+                return
+
+            # Importar aquí para evitar importación circular
+            import asyncio
+            from smart_discord_notifier import NotificationPriority
+
+            side_text = "SHORT" if is_short else "LONG"
+            direction_emoji = "📉" if is_short else "📈"
+            
+            # Formatear mensaje - ✅ CORREGIDO: Separar lógica condicional del f-string
+            max_price = position.highest_price_since_entry if not is_short else position.lowest_price_since_entry
+            max_price_str = f"${max_price:.4f}" if max_price is not None else "N/A"
+            
+            message = f"""🎯 **TRAILING STOP ACTIVADO**
+
+{direction_emoji} **{position.symbol} {side_text}** Pos #{position.order_id}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📍 **Precio entrada:** ${position.entry_price:.4f}
+💰 **Precio actual:** ${getattr(position, 'current_price', 'N/A')}
+📊 **PnL actual:** +{current_pnl_percent:.2f}%
+⚙️ **Umbral alcanzado:** {activation_threshold}%
+
+🚀 **Stop inicial:** ${position.trailing_stop_price:.4f}
+🛡️ **Protección:** +{protection_percent:.2f}%
+🏔️ **Precio máximo:** {max_price_str}
+
+✅ **El trailing stop protegerá automáticamente las ganancias**"""
+
+            # Programar notificación asíncrona
+            async def send_notification():
+                try:
+                    await self.discord_notifier.send_system_notification(
+                        message, 
+                        NotificationPriority.HIGH
+                    )
+                    print(f"✅ Discord: Notificación de activación de trailing stop enviada para {position.symbol}")
+                except Exception as e:
+                    print(f"❌ Error enviando notificación async de trailing stop: {e}")
+
+            # Crear tarea sin bloquear
+            asyncio.create_task(send_notification())
+            print(f"📢 Discord programado: Trailing stop activado para {position.symbol}")
+
+        except Exception as e:
+            print(f"❌ Error programando notificación de activación de trailing stop: {e}")
+
+    def _schedule_trailing_stop_execution_notification(self, position: Position, current_price: float, 
+                                                     final_pnl: float, is_short: bool = False):
+        """🛑 Programar notificación Discord cuando se ejecuta el trailing stop"""
+        try:
+            if not self.discord_notifier:
+                print("⚠️ Discord notifier no disponible para trailing stop")
+                return
+
+            # Importar aquí para evitar importación circular  
+            import asyncio
+            from smart_discord_notifier import NotificationPriority
+
+            side_text = "SHORT" if is_short else "LONG"
+            direction_emoji = "📈" if is_short else "📉"
+            pnl_emoji = "💰" if final_pnl > 0 else "💸"
+            pnl_sign = "+" if final_pnl > 0 else ""
+            
+            # Formatear mensaje
+            message = f"""🛑 **TRAILING STOP EJECUTADO**
+
+{direction_emoji} **{position.symbol} {side_text}** Pos #{position.order_id}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📍 **Precio entrada:** ${position.entry_price:.4f}
+💥 **Precio ejecución:** ${current_price:.4f}
+🎯 **Stop price:** ${position.trailing_stop_price:.4f}
+
+{pnl_emoji} **PnL final:** {pnl_sign}{final_pnl:.2f}%
+📊 **Valor posición:** ${getattr(position, 'quantity', 0) * position.entry_price:.2f}
+🏆 **Movimientos trailing:** {getattr(position, 'trailing_movements', 0)}
+
+✅ **Ganancias protegidas exitosamente por trailing stop**"""
+
+            # Programar notificación asíncrona
+            async def send_execution_notification():
+                try:
+                    await self.discord_notifier.send_system_notification(
+                        message, 
+                        NotificationPriority.CRITICAL
+                    )
+                    print(f"✅ Discord: Notificación de ejecución de trailing stop enviada para {position.symbol}")
+                except Exception as e:
+                    print(f"❌ Error enviando notificación async de ejecución de trailing stop: {e}")
+
+            # Crear tarea sin bloquear
+            asyncio.create_task(send_execution_notification())
+            print(f"📢 Discord programado: Trailing stop ejecutado para {position.symbol}")
+
+        except Exception as e:
+            print(f"❌ Error programando notificación de ejecución de trailing stop: {e}")
+
+    async def initialize(self):
+        """🚀 Inicialización asíncrona del portfolio manager"""
+        try:
+            print("🚀 Inicializando Professional Portfolio Manager...")
+            
+            # Verificar conectividad con Binance
+            await self._verify_connectivity()
+            
+            # Refrescar cache de símbolos válidos
+            await self._refresh_symbol_validity_cache()
+            
+            print("✅ Professional Portfolio Manager inicializado correctamente")
+            
+        except Exception as e:
+            print(f"❌ Error inicializando Portfolio Manager: {e}")
+            raise
+
+    async def _verify_connectivity(self):
+        """🔍 Verificar conectividad con Binance"""
+        try:
+            # Intentar obtener información de la cuenta
+            await self._make_authenticated_request("account")
+            print("✅ Conectividad con Binance verificada")
+            
+            # ✅ NUEVO: Verificar sincronización de tiempo
+            await self._check_time_sync()
+            
+        except Exception as e:
+            print(f"❌ Error de conectividad con Binance: {e}")
+            raise
+
+    async def _check_time_sync(self):
+        """🕐 Verificar sincronización de tiempo con Binance y ajustar recvWindow"""
+        try:
+            print("🕐 Verificando sincronización de tiempo con Binance...")
+            
+            # ✅ NUEVO: Obtener tiempo del servidor sin autenticación (más eficiente)
+            server_time = await self._get_server_time()
+            
+            # Obtener tiempo local
+            local_time = int(time.time() * 1000)
+            
+            # Calcular diferencia
+            time_diff = abs(server_time - local_time)
+            time_diff_seconds = time_diff / 1000
+            
+            print(f"   🕐 Tiempo servidor Binance: {server_time}")
+            print(f"   🕐 Tiempo local: {local_time}")
+            print(f"   📊 Diferencia: {time_diff_seconds:.2f} segundos")
+            
+            # ✅ NUEVO: Ajustar recvWindow basado en la diferencia de tiempo
+            if time_diff_seconds > 5:  # Diferencia > 5 segundos
+                print(f"   ⚠️ Diferencia de tiempo significativa detectada")
+                print(f"   🔧 Ajustando recvWindow para compensar...")
+                
+                # Aumentar recvWindow base para compensar la diferencia
+                self._time_adjusted_recv_window = max(60000, int(time_diff_seconds * 1000) + 30000)
+                print(f"   📈 Nuevo recvWindow base: {self._time_adjusted_recv_window}ms")
+            else:
+                print(f"   ✅ Sincronización de tiempo OK")
+                self._time_adjusted_recv_window = 30000  # Valor por defecto
+                
+        except Exception as e:
+            print(f"⚠️ Error verificando sincronización de tiempo: {e}")
+            # Usar valores por defecto
+            self._time_adjusted_recv_window = 30000
+
+    async def _get_server_time(self) -> int:
+        """🕐 Obtener tiempo del servidor de Binance sin autenticación"""
+        try:
+            async with aiohttp.ClientSession() as session:
+                url = f"{self.base_url}/api/v3/time"
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return data['serverTime']
+                    else:
+                        raise Exception(f"Error obteniendo tiempo del servidor: {response.status}")
+        except Exception as e:
+            print(f"⚠️ Error obteniendo tiempo del servidor: {e}")
+            # Fallback: usar tiempo local
+            return int(time.time() * 1000)
 
 async def test_portfolio_manager():
     """🧪 Probar Portfolio Manager"""

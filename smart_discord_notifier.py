@@ -129,6 +129,10 @@ class SmartDiscordNotifier:
 
         formatted_message = f"🖥️ **SISTEMA** | {priority.value}\n{message}"
 
+        # Si el mensaje es muy largo, dividirlo en múltiples embeds
+        if len(formatted_message) > 2000:
+            return await self._send_multiple_embeds(formatted_message, priority)
+        
         return await self._send_notification(formatted_message, priority)
 
     async def send_daily_summary(self, summary_data: Dict) -> bool:
@@ -273,6 +277,11 @@ class SmartDiscordNotifier:
             return True
 
         try:
+            # Verificar límite de caracteres de Discord (2000 para embeds)
+            if len(message) > 2000:
+                print(f"⚠️ Mensaje muy largo ({len(message)} chars), truncando a 2000")
+                message = message[:1997] + "..."
+            
             # Color según prioridad
             colors = {
                 NotificationPriority.LOW: 0x3498db,      # Azul
@@ -308,6 +317,77 @@ class SmartDiscordNotifier:
 
         except Exception as e:
             print(f"❌ Error Discord: {e}")
+            self.stats['errors'] += 1
+            return False
+
+    async def _send_multiple_embeds(self, message: str, priority: NotificationPriority) -> bool:
+        """📤 Enviar mensaje largo dividido en múltiples embeds"""
+        try:
+            if not self.webhook_url:
+                print(f"📢 Discord (sin webhook): {message[:50]}...")
+                return True
+
+            # Dividir mensaje en chunks de máximo 1900 caracteres (dejando margen)
+            chunks = []
+            current_chunk = ""
+            lines = message.split('\n')
+            
+            for line in lines:
+                if len(current_chunk + line + '\n') > 1900:
+                    if current_chunk:
+                        chunks.append(current_chunk.strip())
+                        current_chunk = line + '\n'
+                    else:
+                        # Si una línea sola es muy larga, truncarla
+                        chunks.append(line[:1900])
+                else:
+                    current_chunk += line + '\n'
+            
+            if current_chunk:
+                chunks.append(current_chunk.strip())
+
+            # Color según prioridad
+            colors = {
+                NotificationPriority.LOW: 0x3498db,      # Azul
+                NotificationPriority.MEDIUM: 0x2ecc71,   # Verde
+                NotificationPriority.HIGH: 0xf39c12,     # Naranja
+                NotificationPriority.CRITICAL: 0xe74c3c  # Rojo
+            }
+
+            # Enviar cada chunk como un embed separado
+            for i, chunk in enumerate(chunks):
+                embed_title = f"📊 REPORTE TÉCNICO (Parte {i+1}/{len(chunks)})" if len(chunks) > 1 else "📊 REPORTE TÉCNICO"
+                
+                payload = {
+                    "embeds": [{
+                        "title": embed_title,
+                        "description": chunk,
+                        "color": colors.get(priority, 0x2ecc71),
+                        "timestamp": datetime.now().isoformat(),
+                        "footer": {
+                            "text": f"Bot Profesional | {priority.value}"
+                        }
+                    }]
+                }
+
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(self.webhook_url, json=payload) as response:
+                        if response.status not in [200, 204]:
+                            response_text = await response.text()
+                            print(f"❌ Discord error {response.status}: {response_text[:100]}...")
+                            self.stats['errors'] += 1
+                            return False
+                        else:
+                            print(f"✅ Discord enviado (parte {i+1}/{len(chunks)}): {chunk[:50]}...")
+                
+                # Pequeña pausa entre embeds para evitar rate limiting
+                if i < len(chunks) - 1:
+                    await asyncio.sleep(0.5)
+
+            return True
+
+        except Exception as e:
+            print(f"❌ Error Discord múltiples embeds: {e}")
             self.stats['errors'] += 1
             return False
 

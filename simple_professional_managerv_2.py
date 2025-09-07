@@ -88,7 +88,23 @@ from loss_protection import LossProtectionManager
 #from utils.binance_client import create_binance_client
 #from utils.discord_webhook import send_discord_notification
 
-load_dotenv()
+# ✅ CORREGIDO: Cargar .env desde el directorio raíz del proyecto
+import os
+from pathlib import Path
+
+# Obtener la ruta del directorio raíz del proyecto (donde está el archivo .env)
+project_root = Path(__file__).parent
+env_path = project_root / '.env'
+
+# Cargar variables de entorno desde .env
+if env_path.exists():
+    load_dotenv(env_path)
+    print(f"✅ Archivo .env cargado desde: {env_path}")
+else:
+    print(f"⚠️ Archivo .env no encontrado en: {env_path}")
+    # Intentar cargar desde el directorio actual como fallback
+    load_dotenv()
+    print("⚠️ Cargando .env desde directorio actual como fallback")
 
 @dataclass
 class BinanceConfig:
@@ -132,65 +148,148 @@ class SimpleProfessionalTradingManager:
         self.signal_history = {}  # Historial de señales por símbolo
         self.last_position_action = {}  # Última acción de posición por símbolo
         self.signal_cooldown = {  # Tiempos de enfriamiento por símbolo (en minutos) - RELAJADOS
-            'ETHUSDT': 3,  # ETH: Sin cooldown (era 15 minutos)
-            'BTCUSDT': 3,  # BTC: Sin cooldown (era 10 minutos)
-            'BNBUSDT': 2,  # BNB: Sin cooldown (era 12 minutos)
+            'ETHUSDT': 0,  # ETH: Sin cooldown (era 15 minutos)
+            'BTCUSDT': 0,  # BTC: Sin cooldown (era 10 minutos)
+            'BNBUSDT': 0,  # BNB: Sin cooldown (era 12 minutos)
             'XRPUSDT': 0,  # XRP: Sin cooldown (era 12 minutos)
             'DOTUSDT': 0,  # DOT: Sin cooldown (era 12 minutos)
+            'ADAUSDT': 0,  # ADA: Sin cooldown (nuevo par activado)
+            'SOLUSDT': 0,  # SOL: Sin cooldown (nuevo par activado)
+            'LINKUSDT': 0,  # LINK: Sin cooldown (nuevo par activado)
         }
+        
+        # ✅ NUEVO: Sistema de cooldown post-cierre RELAJADO - ENSEMBLE DE 3 MODELOS
+        self.post_close_cooldown = {  # Cooldown después de cerrar posiciones (en minutos) - RELAJADO
+            'ETHUSDT': {
+                'profit_close': 2,     # ✅ RELAJADO: 2 min después de cerrar con ganancias (era 5)
+                'loss_close': 5,       # ✅ RELAJADO: 3 min después de cerrar con pérdidas (era 6)
+                'trailing_stop_close': 3, # ✅ RELAJADO: 2 min después de cerrar por trailing stop (era 5)
+                'reversal_close': 6    # ✅ RELAJADO: 3 min después de cerrar por reversión (era 8)
+            },
+            'BTCUSDT': {
+                'profit_close': 2,     # ✅ RELAJADO: 2 min después de cerrar con ganancias (era 5)
+                'loss_close': 5,       # ✅ RELAJADO: 3 min después de cerrar con pérdidas (era 6)
+                'trailing_stop_close': 3,  # ✅ RELAJADO: 2 min después de cerrar por trailing stop (era 5)
+                'reversal_close': 6    # ✅ RELAJADO: 3 min después de cerrar por reversión (era 7)
+            },
+            'BNBUSDT': {
+                'profit_close': 2,     # ✅ RELAJADO: 2 min después de cerrar con ganancias (era 5)
+                'loss_close': 5,       # ✅ RELAJADO: 3 min después de cerrar con pérdidas (era 6)
+                'trailing_stop_close': 3,  # ✅ RELAJADO: 2 min después de cerrar por trailing stop (era 5)
+                'reversal_close': 6    # ✅ RELAJADO: 3 min después de cerrar por reversión (era 8)
+            },
+            'XRPUSDT': {
+                'profit_close': 2,     # ✅ RELAJADO: 2 min después de cerrar con ganancias (era 5)
+                'loss_close': 5,       # ✅ RELAJADO: 2 min después de cerrar con pérdidas (era 6)
+                'trailing_stop_close': 3,  # ✅ RELAJADO: 2 min después de cerrar por trailing stop (era 5)
+                'reversal_close': 6    # ✅ RELAJADO: 2 min después de cerrar por reversión (era 6)
+            },
+            'DOTUSDT': {
+                'profit_close': 2,     # ✅ RELAJADO: 2 min después de cerrar con ganancias (era 5)
+                'loss_close': 5,       # ✅ RELAJADO: 3 min después de cerrar con pérdidas (era 6)
+                'trailing_stop_close': 3,  # ✅ RELAJADO: 2 min después de cerrar por trailing stop (era 5)
+                'reversal_close': 6    # ✅ RELAJADO: 3 min después de cerrar por reversión (era 8)
+            },
+            'ADAUSDT': {
+                'profit_close': 2,     # ✅ RELAJADO: 2 min después de cerrar con ganancias (era 5)
+                'loss_close': 5,       # ✅ RELAJADO: 3 min después de cerrar con pérdidas (era 6)
+                'trailing_stop_close': 3,  # ✅ RELAJADO: 2 min después de cerrar por trailing stop (era 5)
+                'reversal_close': 6    # ✅ RELAJADO: 3 min después de cerrar por reversión (era 7)
+            },
+            'SOLUSDT': {
+                'profit_close': 2,     # ✅ RELAJADO: 2 min después de cerrar con ganancias (era 5)
+                'loss_close': 5,       # ✅ RELAJADO: 3 min después de cerrar con pérdidas (era 6)
+                'trailing_stop_close': 3,  # ✅ RELAJADO: 2 min después de cerrar por trailing stop (era 5)
+                'reversal_close': 6    # ✅ RELAJADO: 3 min después de cerrar por reversión (era 7)
+            },
+            'POLUSDT': {
+                'profit_close': 2,     # ✅ RELAJADO: 2 min después de cerrar con ganancias (era 5)
+                'loss_close': 5,       # ✅ RELAJADO: 3 min después de cerrar con pérdidas (era 6)
+                'trailing_stop_close': 3,  # ✅ RELAJADO: 2 min después de cerrar por trailing stop (era 5)
+                'reversal_close': 6    # ✅ RELAJADO: 3 min después de cerrar por reversión (era 7)
+            }
+        }
+        
+        # ✅ NUEVO: Tracking de cierres recientes para aplicar cooldowns
+        self.recent_closes = {}  # {symbol: {'last_close_time': datetime, 'close_type': str, 'pnl_percent': float}}
+        
+        # ✅ NUEVO: Tracking de cierres recientes para aplicar cooldowns
+        self.recent_closes = {}  # {symbol: {'last_close_time': datetime, 'close_type': str, 'pnl_percent': float}}
+        
         self.eth_position_protection = {  # Protección específica para ETH (RELAJADA)
             'last_close_time': None,
-            'min_hold_time_minutes': 10,  # ✅ RELAJADO: De 20 min a 10 min para ETH
+            'min_hold_time_minutes': 2,  # ✅ RELAJADO: De 20 min a 10 min para ETH
             'consecutive_signals': 0,     # Contador de señales consecutivas
             'signal_confirmation_required': 1 # ✅ RELAJADO: Requiere solo 1 señal consecutiva para ETH (era 2)
         }
 
-        # ✅ NUEVO: Sistema de reversión de señal mejorado con señales consecutivas - TIMEOUT REDUCIDO
+        # ✅ NUEVO: Sistema de reversión de señal mejorado con señales consecutivas - MUY ESTRICTO PARA MAYOR ESTABILIDAD
         self.reversal_tracking = {}  # Tracking de señales de reversión por símbolo
         self.reversal_config = {
             'ETHUSDT': {
-                'required_consecutive_signals': 3,  # ETH requiere 3 señales consecutivas
-                'timeout_minutes': 5,  # ✅ REDUCIDO: 5 minutos para tracking más dinámico
-                'min_confidence_per_signal': 78.0,  # ✅ CORREGIDO: Realista (era 90%)
-                'cumulative_confidence_threshold': 82.0,  # ✅ CORREGIDO: Alcanzable (era 95%)
-                'min_interval_between_signals_minutes': 2  # ✅ REDUCIDO: 2 minutos entre señales válidas
+                'required_consecutive_signals': 50,  # ✅ MUY ESTRICTO: Aumentado de 2 a 20 para mayor estabilidad
+                'timeout_minutes': 1.8,  # ✅ MANTENER: Timeout de 1.8 min
+                'min_confidence_per_signal': 78.0,  # ✅ MANTENER: 78% confianza mínima por señal
+                'cumulative_confidence_threshold': 80.0,  # ✅ MANTENER: 80% confianza acumulativa
+                'min_interval_between_signals_minutes': 1.0  # ✅ MANTENER: 1.0 min entre señales
             },
             'BTCUSDT': {
-                'required_consecutive_signals': 2,  # BTC requiere 2 señales consecutivas
-                'timeout_minutes': 4,  # ✅ REDUCIDO: 4 minutos para BTC
-                'min_confidence_per_signal': 75.0,  # ✅ CORREGIDO: Realista (era 88%)
-                'cumulative_confidence_threshold': 80.0,  # ✅ CORREGIDO: Alcanzable (era 95%)
-                'min_interval_between_signals_minutes': 1.5  # ✅ REDUCIDO: 1.5 minutos entre señales válidas
+                'required_consecutive_signals': 50,  # ✅ MUY ESTRICTO: Aumentado de 2 a 20 para mayor estabilidad
+                'timeout_minutes': 1.5,  # ✅ MANTENER: Timeout de 1.5 min
+                'min_confidence_per_signal': 76.0,  # ✅ MANTENER: 76% confianza mínima por señal
+                'cumulative_confidence_threshold': 78.0,  # ✅ MANTENER: 78% confianza acumulativa
+                'min_interval_between_signals_minutes': 0.8  # ✅ MANTENER: 0.8 min entre señales
             },
             'BNBUSDT': {
-                'required_consecutive_signals': 2,  # BNB requiere 2 señales consecutivas
-                'timeout_minutes': 4,  # ✅ REDUCIDO: 4 minutos para BNB
-                'min_confidence_per_signal': 75.0,  # ✅ CORREGIDO: Realista (era 88%)
-                'cumulative_confidence_threshold': 80.0,  # ✅ CORREGIDO: Alcanzable (era 95%)
-                'min_interval_between_signals_minutes': 1.5  # ✅ REDUCIDO: 1.5 minutos entre señales válidas
+                'required_consecutive_signals': 50,  # ✅ MUY ESTRICTO: Aumentado de 2 a 20 para mayor estabilidad
+                'timeout_minutes': 1.8,  # ✅ MANTENER: Timeout de 1.8 min
+                'min_confidence_per_signal': 77.0,  # ✅ MANTENER: 77% confianza mínima por señal
+                'cumulative_confidence_threshold': 79.0,  # ✅ MANTENER: 79% confianza acumulativa
+                'min_interval_between_signals_minutes': 1.0  # ✅ MANTENER: 1.0 min entre señales
             },
             'XRPUSDT': {
-                'required_consecutive_signals': 2,  # XRP requiere 2 señales consecutivas
-                'timeout_minutes': 3,  # ✅ REDUCIDO: 3 minutos para XRP (más volátil)
-                'min_confidence_per_signal': 75.0,  # ✅ CORREGIDO: Realista (era 88%)
-                'cumulative_confidence_threshold': 80.0,  # ✅ CORREGIDO: Alcanzable (era 95%)
-                'min_interval_between_signals_minutes': 1  # ✅ REDUCIDO: 1 minuto entre señales válidas
+                'required_consecutive_signals': 50,  # ✅ MUY ESTRICTO: Aumentado de 2 a 20 para mayor estabilidad
+                'timeout_minutes': 1.2,  # ✅ MANTENER: Timeout de 1.2 min
+                'min_confidence_per_signal': 74.0,  # ✅ MANTENER: 74% confianza mínima por señal
+                'cumulative_confidence_threshold': 76.0,  # ✅ MANTENER: 76% confianza acumulativa
+                'min_interval_between_signals_minutes': 0.6  # ✅ MANTENER: 0.6 min entre señales
             },
             'DOTUSDT': {
-                'required_consecutive_signals': 2,  # DOT requiere 2 señales consecutivas
-                'timeout_minutes': 3,  # ✅ REDUCIDO: 3 minutos para DOT
-                'min_confidence_per_signal': 75.0,  # ✅ CORREGIDO: Realista (era 88%)
-                'cumulative_confidence_threshold': 80.0,  # ✅ CORREGIDO: Alcanzable (era 95%)
-                'min_interval_between_signals_minutes': 1  # ✅ REDUCIDO: 1 minuto entre señales válidas
+                'required_consecutive_signals': 50,  # ✅ MUY ESTRICTO: Aumentado de 2 a 20 para mayor estabilidad
+                'timeout_minutes': 1.5,  # ✅ MANTENER: Timeout de 1.5 min
+                'min_confidence_per_signal': 75.0,  # ✅ MANTENER: 75% confianza mínima por señal
+                'cumulative_confidence_threshold': 77.0,  # ✅ MANTENER: 77% confianza acumulativa
+                'min_interval_between_signals_minutes': 0.8  # ✅ MANTENER: 0.8 min entre señales
+            },
+            'ADAUSDT': {
+                'required_consecutive_signals': 50,  # ✅ MUY ESTRICTO: Aumentado de 2 a 20 para mayor estabilidad
+                'timeout_minutes': 1.3,  # ✅ MANTENER: Timeout de 1.3 min
+                'min_confidence_per_signal': 76.0,  # ✅ MANTENER: 76% confianza mínima por señal
+                'cumulative_confidence_threshold': 78.0,  # ✅ MANTENER: 78% confianza acumulativa
+                'min_interval_between_signals_minutes': 0.7  # ✅ MANTENER: 0.7 min entre señales
+            },
+            'SOLUSDT': {
+                'required_consecutive_signals': 50,  # ✅ ESTRICTO: Para SOL volátil
+                'timeout_minutes': 1.2,  # ✅ Timeout de 1.2 min
+                'min_confidence_per_signal': 75.0,  # ✅ 75% confianza mínima por señal
+                'cumulative_confidence_threshold': 77.0,  # ✅ 77% confianza acumulativa
+                'min_interval_between_signals_minutes': 0.6  # ✅ 0.6 min entre señales
+            },
+            'POLUSDT': {
+                'required_consecutive_signals': 50,  # ✅ ESTRICTO: Para POL (token nuevo)
+                'timeout_minutes': 1.3,  # ✅ Timeout de 1.3 min
+                'min_confidence_per_signal': 75.0,  # ✅ 75% confianza mínima por señal
+                'cumulative_confidence_threshold': 77.0,  # ✅ 77% confianza acumulativa
+                'min_interval_between_signals_minutes': 0.7  # ✅ 0.7 min entre señales
             }
         }
 
         # Configuración de símbolos y gestores
         # ✅ ACTUALIZADO: Símbolos con modelos TCN entrenados disponibles
-        self.symbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'DOTUSDT']  # ✅ AGREGADO: DOTUSDT
+        self.symbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'DOTUSDT', 'ADAUSDT', 'SOLUSDT', 'POLUSDT']  # ✅ AGREGADO: SOLUSDT y POLUSDT (reemplazo de POLUSDT)
 
-        # ⚠️ PARES PENDIENTES (sin modelos): ["ADAUSDT", "SOLUSDT"]
-        self.excluded_symbols = ["ADAUSDT", "SOLUSDT"]  # ✅ REMOVIDO: DOTUSDT
+        # ⚠️ PARES PENDIENTES (sin modelos): []
+        self.excluded_symbols = []  # ✅ REMOVIDO: SOLUSDT - ahora está activo
 
         print(f"📊 Pares activos: {self.symbols}")
         print(f"⏸️ Pares excluidos (sin modelos): {self.excluded_symbols}")
@@ -284,39 +383,47 @@ class SimpleProfessionalTradingManager:
         self.loss_protection = LossProtectionManager()
 
     def _initialize_tcn_predictor_sync(self):
-        """🧠 Inicialización síncrona básica del predictor TCN ENSEMBLE"""
+        """🧠 Inicialización síncrona básica del predictor ENSEMBLE V3 DINÁMICO"""
         try:
             from tcn_ensemble_predictor import TCNEnsemblePredictor
             self.tcn_predictor = TCNEnsemblePredictor()
 
-            # ✅ NUEVO: Verificar que el predictor use datos reales de Binance
-            print("🔍 VERIFICANDO USO DE DATOS REALES DE BINANCE...")
-            self.tcn_predictor.verify_real_data_usage()
-            self.tcn_predictor.document_real_data_usage()
-
-            # Cargar modelos definitivo_v3 dinámicamente
-            if self.tcn_predictor.load_definitivo_v3_models():
+            # ✅ NUEVO: Cargar modelos dinámicamente (TCN + Técnico)
+            load_success = self.tcn_predictor.load_definitivo_v3_models()
+            
+            if load_success:
                 model_info = self.tcn_predictor.get_model_info()
-                print("🎯 Predictor TCN ENSEMBLE V3 DINÁMICO inicializado correctamente")
+                operation_mode = model_info.get('operation_mode', 'technical_only')
+                
+                print("🎯 Predictor ENSEMBLE V3 DINÁMICO inicializado correctamente")
+                print(f"   🚀 Modo de operación: {operation_mode.upper()}")
                 print(f"   📊 Modelos cargados: {model_info['loaded_models']}")
                 print(f"   ⏰ Timeframes disponibles: {', '.join(model_info['available_timeframes'])}")
                 print(f"   🎯 Símbolos soportados: {self.tcn_predictor.symbols}")
                 print(f"   🏗️ Tipo: {model_info['model_type']}")
                 print("   ✅ DOTUSDT incluido en predicciones y notificaciones")
-                print("   🔧 Sistema completamente dinámico - Compatible con cualquier configuración")
-                print("   ✅ DATOS REALES DE BINANCE VERIFICADOS")
+                print("   🔧 Sistema híbrido TCN + Técnico")
+                print("   ✅ MODELOS ENSEMBLE CARGADOS CORRECTAMENTE")
+                
+                if operation_mode == "hybrid":
+                    print("   🔧 FUNCIONANDO EN MODO HÍBRIDO TCN + TÉCNICO")
+                    print("   📈 Predictores disponibles: 1m, 3m, 5m + TCN")
+                    print("   💡 Ensemble híbrido con análisis técnico y ML")
+                    print("   🎯 Análisis de convergencia entre timeframes")
+                    print("   🚀 Boost de confianza para señales alineadas")
+                    
                 return True
             else:
-                raise Exception("No se pudieron cargar los modelos definitivo_v3")
+                raise Exception("No se pudieron inicializar capacidades de predicción técnicas")
         except Exception as e:
-            print(f"❌ ERROR CRÍTICO: No se pudo inicializar TCN ENSEMBLE en constructor: {e}")
-            print("🚨 SISTEMA REQUIERE TCN ENSEMBLE - NO PUEDE CONTINUAR SIN ÉL")
+            print(f"❌ ERROR CRÍTICO: No se pudo inicializar ENSEMBLE PREDICTOR: {e}")
+            print("🚨 SISTEMA REQUIERE CAPACIDADES DE PREDICCIÓN ENSEMBLE")
             import traceback
             print(f"🔍 Traceback completo: {traceback.format_exc()}")
-            raise Exception(f"TCN ENSEMBLE requerido pero falló en constructor: {e}")
+            raise Exception(f"Ensemble Predictor requerido pero falló en constructor: {e}")
 
     async def _initialize_tcn_predictor(self):
-        """🧠 Verificación adicional de autenticidad de datos de Binance"""
+        """🧠 Verificación adicional de autenticidad de datos de Binance para Ensemble Predictor"""
         try:
             # ✅ NUEVO: Verificar autenticidad de datos de Binance
             print("🔍 VERIFICANDO AUTENTICIDAD DE DATOS DE BINANCE...")
@@ -479,9 +586,13 @@ class SimpleProfessionalTradingManager:
             self.portfolio_manager = ProfessionalPortfolioManager(
                 api_key=self.binance_config.api_key,
                 secret_key=self.binance_config.secret_key,
-                base_url=self.binance_config.base_url
+                base_url=self.binance_config.base_url,
+                discord_notifier=self.discord_notifier  # ✅ NUEVO: Pasar Discord notifier para trailing stops
             )
-            print("✅ Portfolio Manager inicializado")
+            
+            # ✅ NUEVO: Inicializar el portfolio manager de manera asíncrona
+            await self.portfolio_manager.initialize()
+            print("✅ Portfolio Manager inicializado con Discord notifier")
 
             # 4. Inicializar Risk Manager
             await self._initialize_risk_manager()
@@ -711,6 +822,9 @@ class SimpleProfessionalTradingManager:
 
                 # ✅ NUEVO: Limpiar tracking de reversión colgado (cada 5 minutos)
                 await self._cleanup_stale_reversal_tracking()
+                
+                # ✅ NUEVO: Limpiar cooldowns post-cierre expirados automáticamente
+                self.cleanup_expired_post_close_cooldowns()
 
                 # ✅ MEJORADO: Mostrar información profesional en tiempo real
                 await self._display_professional_info()
@@ -854,16 +968,31 @@ class SimpleProfessionalTradingManager:
                 reversal_tracking_report = self._display_reversal_tracking_status()
                 full_report += reversal_tracking_report
 
+                # ✅ NUEVO: Agregar diagnóstico de sincronización de posiciones (SOLO PARA CONSOLA)
+                sync_diagnosis = await self._generate_sync_diagnosis_section()
+                full_report += sync_diagnosis
+                
+                # ✅ NUEVO: Limpieza automática si se detecta desincronización
+                await self._auto_cleanup_if_desynchronized()
+
                 # Mostrar en consola
                 print("\n" + "="*80)
                 print("🎯 REPORTE TCN PROFESSIONAL")
                 print("="*80)
                 print(full_report)
                 print("="*80)
+                
+                # ✅ NUEVO: Comandos de diagnóstico rápido
+                print("\n🔧 COMANDOS DE DIAGNÓSTICO DISPONIBLES:")
+                print("   📊 await manager.diagnose_position_synchronization() - Diagnóstico completo")
+                print("   🔧 await manager.force_synchronization() - Sincronización forzada")
+                print("   🧹 await manager._auto_cleanup_if_desynchronized() - Limpieza automática")
 
-                # Enviar a Discord si está configurado
+                # Enviar a Discord si está configurado (SIN diagnóstico de sincronización)
                 if hasattr(self, 'discord_notifier'):
-                    await self._send_tcn_discord_notification(full_report)
+                    # Crear reporte para Discord sin el diagnóstico de sincronización
+                    discord_report = full_report.replace(sync_diagnosis, "")
+                    await self._send_tcn_discord_notification(discord_report)
                     self.metrics['tcn_reports_sent'] += 1
 
                 self.last_tcn_report_time = now
@@ -1152,6 +1281,11 @@ class SimpleProfessionalTradingManager:
                 print(f"🎯 Posiciones Activas: 0/5")
                 print("📈 POSICIONES: Ninguna")
 
+            # ✅ NUEVO: Mostrar estado de cooldowns post-cierre
+            print("=" * 80)
+            self._display_cooldown_status()
+            print("=" * 80)
+
             # Mostrar métricas
             print(f"📊 MÉTRICAS: API calls: {self.metrics.get('api_calls_count', 0)} | Errores: {self.metrics.get('error_count', 0)} | Reportes TCN: {self.metrics.get('tcn_reports_sent', 0)}")
 
@@ -1159,6 +1293,54 @@ class SimpleProfessionalTradingManager:
 
         except Exception as e:
             print(f"❌ Error en display: {e}")
+
+    def _display_cooldown_status(self):
+        """⏰ Mostrar estado actual de cooldowns post-cierre"""
+        try:
+            if not self.recent_closes:
+                print("⏰ COOLDOWNS: Ningún cooldown activo")
+                return
+
+            from datetime import datetime
+            
+            active_cooldowns = []
+            expired_cooldowns = []
+            
+            current_time = datetime.now()
+            
+            for symbol, close_info in self.recent_closes.items():
+                close_time = close_info['last_close_time']
+                close_type = close_info['close_type']
+                pnl_percent = close_info.get('pnl_percent', 0.0)
+                
+                # Obtener cooldown específico
+                cooldown_minutes = self.post_close_cooldown.get(symbol, {}).get(close_type, 5)
+                elapsed_minutes = (current_time - close_time).total_seconds() / 60
+                
+                if elapsed_minutes < cooldown_minutes:
+                    remaining_minutes = cooldown_minutes - elapsed_minutes
+                    if remaining_minutes >= 1:
+                        remaining_time = f"{remaining_minutes:.0f}m"
+                    else:
+                        remaining_seconds = remaining_minutes * 60
+                        remaining_time = f"{remaining_seconds:.0f}s"
+                    
+                    pnl_emoji = "📈" if pnl_percent > 0 else "📉"
+                    close_type_emoji = "🛑" if close_type == "trailing_stop_close" else ("💰" if close_type == "profit_close" else "🔴")
+                    
+                    active_cooldowns.append(f"   {close_type_emoji} {symbol}: {remaining_time} ({close_type.replace('_', ' ').title()}) {pnl_emoji}{pnl_percent:.1f}%")
+                else:
+                    expired_cooldowns.append(symbol)
+            
+            if active_cooldowns:
+                print("⏰ COOLDOWNS ACTIVOS:")
+                for cooldown in active_cooldowns:
+                    print(cooldown)
+            else:
+                print("⏰ COOLDOWNS: Todos expirados - Trading libre")
+                
+        except Exception as e:
+            print(f"❌ Error mostrando cooldowns: {e}")
 
     async def _send_tcn_discord_notification(self, tcn_report: str):
         """💬 Enviar reporte TCN a Discord"""
@@ -1175,13 +1357,11 @@ class SimpleProfessionalTradingManager:
                 NotificationPriority.HIGH
             )
 
-            if result and hasattr(result, 'status_code'):
-                if result.status_code == 204:
-                    print("✅ Discord: Reporte TCN enviado (204 OK)")
-                elif result.status_code == 200:
-                    print("✅ Discord: Reporte TCN enviado (200 OK)")
-                else:
-                    print(f"⚠️ Discord: Status {result.status_code}")
+            # El método send_system_notification devuelve un booleano, no un objeto con status_code
+            if result:
+                print("✅ Discord: Reporte TCN enviado correctamente")
+            else:
+                print("⚠️ Discord: Error enviando reporte TCN")
 
         except Exception as e:
             print(f"❌ Discord error: {e}")
@@ -1232,10 +1412,10 @@ class SimpleProfessionalTradingManager:
 
     async def _generate_tcn_signals(self, prices: Dict[str, float]) -> Dict:
         """
-        🧠 Genera señales de trading (BUY/SELL) basadas en la confianza del modelo TCN.
+        🧠 Genera señales de trading (BUY/SELL) basadas en la confianza del Global Ensemble Predictor.
         ---
         CORREGIDO: Asegura que tanto las señales BUY como SELL se añadan a la cola de procesamiento.
-        Versión híbrida que combina la simplicidad de Gemini con la funcionalidad actual.
+        Versión técnica que combina análisis de 1m, 3m y 5m timeframes con convergencia inteligente.
         """
         signals = {}
 
@@ -1243,10 +1423,10 @@ class SimpleProfessionalTradingManager:
         if not hasattr(self, 'last_signals'):
             self.last_signals = {}
 
-        # ✅ VERIFICAR que TCN está inicializado (debe estar desde constructor)
+        # ✅ VERIFICAR que Global Ensemble Predictor está inicializado (debe estar desde constructor)
         if not hasattr(self, 'tcn_predictor') or self.tcn_predictor is None:
-            print("❌ ERROR CRÍTICO: TCN no está inicializado")
-            print("🚨 SISTEMA REQUIERE TCN REAL - REINTENTANDO INICIALIZACIÓN")
+            print("❌ ERROR CRÍTICO: Global Ensemble Predictor no está inicializado")
+            print("🚨 SISTEMA REQUIERE ENSEMBLE TÉCNICO - REINTENTANDO INICIALIZACIÓN")
             self._initialize_tcn_predictor()
 
         # ✅ NUEVO: Analizar contexto de mercado como capa de seguridad
@@ -1266,25 +1446,25 @@ class SimpleProfessionalTradingManager:
             }
 
         # ✅ CENTRALIZADO: Umbral de confianza desde .env con ajustes por régimen
-        base_threshold = float(os.getenv('MIN_CONFIDENCE_THRESHOLD', '0.65')) * 100  # Convertir a porcentaje
+        base_threshold = float(os.getenv('MIN_CONFIDENCE_THRESHOLD', '0.65'))  # ✅ CORREGIDO: SIN multiplicar por 100
 
         # Ajustar umbral según régimen de mercado
         if market_context['regime'] == 'BEARISH':
             threshold = base_threshold * 1.1  # ✅ BEARISH: +10% sobre base
-            print(f"🎯 UMBRAL BEARISH: {threshold:.1f}% (base: {base_threshold:.1f}%) - Mercado BEARISH {market_context['confidence']:.1%}")
+            print(f"🎯 UMBRAL BEARISH: {threshold * 100:.1f}% (base: {base_threshold * 100:.1f}%) - Mercado BEARISH {market_context['confidence']:.1%}")
         elif market_context['regime'] == 'BULLISH' and market_context['confidence'] > 0.9:
             threshold = base_threshold * 0.9  # 90% del umbral base para mercado muy bullish
-            print(f"🎯 UMBRAL ADAPTATIVO: {threshold:.1f}% (base: {base_threshold:.1f}%) - Mercado BULLISH {market_context['confidence']:.1%}")
+            print(f"🎯 UMBRAL ADAPTATIVO: {threshold * 100:.1f}% (base: {base_threshold * 100:.1f}%) - Mercado BULLISH {market_context['confidence']:.1%}")
         elif market_context['regime'] == 'BULLISH' and market_context['confidence'] > 0.7:
             threshold = base_threshold * 0.95  # 95% del umbral base para mercado bullish
-            print(f"🎯 UMBRAL ADAPTATIVO: {threshold:.1f}% (base: {base_threshold:.1f}%) - Mercado BULLISH {market_context['confidence']:.1%}")
+            print(f"🎯 UMBRAL ADAPTATIVO: {threshold * 100:.1f}% (base: {base_threshold * 100:.1f}%) - Mercado BULLISH {market_context['confidence']:.1%}")
         else:
             threshold = base_threshold
-            print(f"🎯 UMBRAL ESTÁNDAR: {threshold:.1f}% - Mercado {market_context['regime']}")
+            print(f"🎯 UMBRAL ESTÁNDAR: {threshold * 100:.1f}% - Mercado {market_context['regime']}")
 
-        # ✅ ENSEMBLE PREDICTOR: Usar predict_ensemble_v3 para todos los símbolos
+        # ✅ GLOBAL ENSEMBLE PREDICTOR: Usar predict_all_symbols_v3 para todos los símbolos
         try:
-            print(f"🔍 Generando predicciones ENSEMBLE para todos los símbolos...")
+            print(f"🔍 Generando predicciones GLOBAL ENSEMBLE para todos los símbolos...")
             all_predictions = await self.tcn_predictor.predict_all_symbols_v3()
 
             if not all_predictions:
@@ -1304,12 +1484,12 @@ class SimpleProfessionalTradingManager:
                 continue
 
             try:
-                print(f"🔍 Procesando {symbol} con predicción ENSEMBLE...")
+                print(f"🔍 Procesando {symbol} con predicción GLOBAL ENSEMBLE...")
 
-                # Obtener predicción ensemble
+                # Obtener predicción global ensemble
                 prediction = all_predictions.get(symbol)
                 if not prediction:
-                    print(f"  ❌ No se pudo obtener predicción ensemble para {symbol}")
+                    print(f"  ❌ No se pudo obtener predicción global ensemble para {symbol}")
                     continue
 
                 signal = prediction['ensemble_signal']
@@ -1343,22 +1523,22 @@ class SimpleProfessionalTradingManager:
                 # ✅ CORREGIDO: Procesar señales válidas independientemente de si han cambiado
                 # Actualizar registro de última señal
                 self.last_signals[symbol] = signal
-                print(f"💡 Señal TCN para {symbol}: {signal} (Confianza: {confidence_level:.2f}%) (Umbral: {threshold:.1f}%)")
+                print(f"💡 Señal TCN para {symbol}: {signal} (Confianza: {confidence_level:.2f}%) (Umbral: {threshold * 100:.1f}%)")
 
                 # ✅ CENTRALIZADO: SELL también requiere confianza mínima desde .env
                 # Aplicar umbral de confianza tanto para BUY como para SELL
                 if market_context['regime'] == 'BEARISH':
-                    sell_threshold = base_threshold * 1.1 + 5  # ✅ BEARISH: +10% base + 5% extra
+                    sell_threshold = base_threshold * 1.1 + 0.05  # ✅ BEARISH: +10% base + 5% extra
                 elif market_context['regime'] == 'BULLISH' and market_context['confidence'] > 0.9:
                     sell_threshold = base_threshold * 0.95  # 95% del umbral base para mercado muy bullish
-                    print(f"🎯 UMBRAL SELL ADAPTATIVO: {sell_threshold:.1f}% (base: {base_threshold:.1f}%) - Mercado BULLISH {market_context['confidence']:.1%}")
+                    print(f"🎯 UMBRAL SELL ADAPTATIVO: {sell_threshold * 100:.1f}% (base: {base_threshold * 100:.1f}%) - Mercado BULLISH {market_context['confidence']:.1%}")
                 elif market_context['regime'] == 'BULLISH' and market_context['confidence'] > 0.7:
                     sell_threshold = base_threshold  # Umbral base para mercado bullish
-                    print(f"🎯 UMBRAL SELL ADAPTATIVO: {sell_threshold:.1f}% (base: {base_threshold:.1f}%) - Mercado BULLISH {market_context['confidence']:.1%}")
+                    print(f"🎯 UMBRAL SELL ADAPTATIVO: {sell_threshold * 100:.1f}% (base: {base_threshold * 100:.1f}%) - Mercado BULLISH {market_context['confidence']:.1%}")
                 else:
-                    sell_threshold = base_threshold + 5  # +5% sobre base para SELL
+                    sell_threshold = base_threshold + 0.05  # +5% sobre base para SELL
 
-                if (signal == 'BUY' and confidence_level >= threshold) or (signal == 'SELL' and confidence_level >= sell_threshold):
+                if (signal == 'BUY' and confidence_level >= threshold * 100) or (signal == 'SELL' and confidence_level >= sell_threshold * 100):
                     log_emoji = "📈" if signal == "BUY" else "📉"
                     log_action = "COMPRA" if signal == "BUY" else "VENTA"
                     print(f"{log_emoji} Oportunidad de {log_action} detectada para {symbol}. Preparando para posible operación.")
@@ -1424,7 +1604,7 @@ class SimpleProfessionalTradingManager:
         else:
             print("📊 No se generaron señales TCN válidas en este ciclo")
             # ✅ INFORMACIÓN: Mostrar por qué no se generaron señales válidas
-            print(f"💡 Umbrales aplicados - BUY: {threshold:.1f}% | SELL: {sell_threshold:.1f}%")
+            print(f"💡 Umbrales aplicados - BUY: {threshold * 100:.1f}% | SELL: {sell_threshold * 100:.1f}%")
             if market_context['regime'] == 'BULLISH' and market_context['confidence'] > 0.7:
                 print(f"🎯 Umbrales relajados por mercado BULLISH ({market_context['confidence']:.1%})")
             return signals
@@ -1449,7 +1629,7 @@ class SimpleProfessionalTradingManager:
             print(f"🏆 Aplicando priorización de señales...")
 
             # Orden de prioridad definido
-            PRIORITY_ORDER = ['XRPUSDT', 'BTCUSDT', 'DOTUSDT', 'ETHUSDT', 'BNBUSDT']
+            PRIORITY_ORDER = ['ETHUSDT', 'XRPUSDT', 'BTCUSDT', 'DOTUSDT', 'ADAUSDT', 'BNBUSDT']
 
             # Separar señales BUY y SELL
             buy_signals = {symbol: data for symbol, data in signals.items() if data['signal'] == 'BUY'}
@@ -1692,7 +1872,7 @@ class SimpleProfessionalTradingManager:
 
         try:
             # ✅ CENTRALIZADO: Definir base_threshold al inicio para uso global
-            base_threshold = float(os.getenv('MIN_CONFIDENCE_THRESHOLD', '0.65')) * 100
+            base_threshold = float(os.getenv('MIN_CONFIDENCE_THRESHOLD', '0.65'))  # ✅ CORREGIDO: SIN multiplicar por 100
 
             # Extraer información del contexto
             regime = market_context.get('regime', 'NEUTRAL')
@@ -1708,11 +1888,6 @@ class SimpleProfessionalTradingManager:
             # Por defecto, no filtrar
             filter_reason = f"Sin filtro aplicado - {regime} con confianza {market_confidence:.1%}"
 
-            # 🎯 BYPASS MODERADO: Mercado bullish con alta volatilidad = OPORTUNIDAD
-            if is_bullish_high_vol and confidence >= base_threshold * 0.8:  # 🎯 MODERADO: 80% del umbral base (52% si base es 65%)
-                filter_reason = f"BYPASS BULLISH+VOLATILIDAD: Oportunidad detectada con {confidence:.1f}% confianza"
-                return signal, filter_reason
-
             # 🔴 FILTROS BEARISH RELAJADOS - Sistema gradual por intensidad (MUCHO MÁS PERMISIVO)
             if regime == 'BEARISH' and market_confidence > 0.8:  # Solo aplicar si confianza muy alta
 
@@ -1727,7 +1902,7 @@ class SimpleProfessionalTradingManager:
                         'XRPUSDT': bearish_threshold,   # ✅ BEARISH: +10% sobre base
                         'DOTUSDT': bearish_threshold    # ✅ BEARISH: +10% sobre base
                     }
-                    sell_threshold = bearish_threshold + 5   # ✅ BEARISH: +10% base + 5%
+                    sell_threshold = bearish_threshold + 0.05   # ✅ BEARISH: +10% base + 5%
                     intensity_level = "MUY_FUERTE"
 
                 elif market_confidence > 0.85:  # BEARISH FUERTE
@@ -1738,7 +1913,7 @@ class SimpleProfessionalTradingManager:
                         'XRPUSDT': bearish_threshold,   # ✅ BEARISH: +10% sobre base
                         'DOTUSDT': bearish_threshold    # ✅ BEARISH: +10% sobre base
                     }
-                    sell_threshold = bearish_threshold + 5   # ✅ BEARISH: +10% base + 5%
+                    sell_threshold = bearish_threshold + 0.05   # ✅ BEARISH: +10% base + 5%
                     intensity_level = "FUERTE"
 
                 else:  # BEARISH MODERADO
@@ -1749,39 +1924,39 @@ class SimpleProfessionalTradingManager:
                         'XRPUSDT': bearish_threshold,   # ✅ BEARISH: +10% sobre base
                         'DOTUSDT': bearish_threshold    # ✅ BEARISH: +10% sobre base
                     }
-                    sell_threshold = bearish_threshold + 5   # ✅ BEARISH: +10% base + 5%
+                    sell_threshold = bearish_threshold + 0.05   # ✅ BEARISH: +10% base + 5%
                     intensity_level = "MODERADO"
 
                 # ✅ NUEVO: Factor de correlación con BTC (RELAJADO)
                 if symbol != 'BTCUSDT' and btc_leading_down:
-                    correlation_penalty = 3  # ✅ RELAJADO: De 5% a 3%
+                    correlation_penalty = 0.03  # ✅ RELAJADO: De 5% a 3%
                     for key in buy_thresholds:
                         if key != 'BTCUSDT':
                             buy_thresholds[key] += correlation_penalty
-                    filter_reason += f" + Penalidad correlación BTC ({correlation_penalty}%)"
+                    filter_reason += f" + Penalidad correlación BTC ({correlation_penalty*100:.0f}%)"
 
                 # ✅ NUEVO: Sistema de relajación temporal automática
                 time_relaxation_factor = market_context.get('time_relaxation_factor', 1.0)
                 if time_relaxation_factor < 1.0:
                     for key in buy_thresholds:
-                        buy_thresholds[key] = int(buy_thresholds[key] * time_relaxation_factor)
-                    sell_threshold = int(sell_threshold * time_relaxation_factor)
+                        buy_thresholds[key] = buy_thresholds[key] * time_relaxation_factor
+                    sell_threshold = sell_threshold * time_relaxation_factor
                     filter_reason += f" + Relax temporal automático ({time_relaxation_factor:.1f}x)"
 
                 if signal == 'BUY':
                     required_confidence = buy_thresholds.get(symbol, base_threshold)  # ✅ CENTRALIZADO: Usar .env
 
-                    if confidence >= required_confidence:
-                        filter_reason = f"{symbol.replace('USDT', '')} permitido en BEARISH {intensity_level} por alta confianza ({confidence:.1f}% > {required_confidence:.1f}%)"
+                    if confidence >= required_confidence * 100:
+                        filter_reason = f"{symbol.replace('USDT', '')} permitido en BEARISH {intensity_level} por alta confianza ({confidence:.1f}% > {required_confidence * 100:.1f}%)"
                     else:
                         signal = 'HOLD'
-                        filter_reason = f"Mercado BEARISH {intensity_level} (score: {market_score:.2f}) - {symbol} BUY requiere >{required_confidence:.1f}% confianza (actual: {confidence:.1f}%)"
+                        filter_reason = f"Mercado BEARISH {intensity_level} (score: {market_score:.2f}) - {symbol} BUY requiere >{required_confidence * 100:.1f}% confianza (actual: {confidence:.1f}%)"
 
                 elif signal == 'SELL':
                     # ✅ CENTRALIZADO: SELL en bearish requiere confianza razonable
-                    if confidence < sell_threshold:
+                    if confidence < sell_threshold * 100:
                         signal = 'HOLD'
-                        filter_reason = f"SELL en BEARISH {intensity_level} requiere >{sell_threshold:.1f}% confianza (actual: {confidence:.1f}%)"
+                        filter_reason = f"SELL en BEARISH {intensity_level} requiere >{sell_threshold * 100:.1f}% confianza (actual: {confidence:.1f}%)"
                     else:
                         filter_reason = f"SELL favorecido en mercado BEARISH {intensity_level} con confianza {confidence:.1f}%"
 
@@ -1791,28 +1966,28 @@ class SimpleProfessionalTradingManager:
                     # ✅ CENTRALIZADO: En bullish, usar umbral base del .env
                     min_buy_confidence = base_threshold * 0.9  # 90% del umbral base para bullish
 
-                    if confidence < min_buy_confidence:
+                    if confidence < min_buy_confidence * 100:
                         signal = 'HOLD'
-                        filter_reason = f"BUY en BULLISH requiere >{min_buy_confidence:.1f}% confianza"
+                        filter_reason = f"BUY en BULLISH requiere >{min_buy_confidence * 100:.1f}% confianza"
                     else:
                         filter_reason = f"BUY favorecido en mercado BULLISH (conf: {market_confidence:.1%})"
 
                 elif signal == 'SELL':
                     # ✅ CENTRALIZADO: En bullish, usar umbral base del .env
-                    min_sell_confidence = base_threshold + 5  # +5% sobre base para SELL
+                    min_sell_confidence = base_threshold + 0.05  # +5% sobre base para SELL
 
-                    if confidence < min_sell_confidence:
+                    if confidence < min_sell_confidence * 100:
                         signal = 'HOLD'
-                        filter_reason = f"Mercado BULLISH (score: {market_score:.2f}) - SELL requiere >{min_sell_confidence:.1f}% confianza (actual: {confidence:.1f}%)"
+                        filter_reason = f"Mercado BULLISH (score: {market_score:.2f}) - SELL requiere >{min_sell_confidence * 100:.1f}% confianza (actual: {confidence:.1f}%)"
                     else:
                         filter_reason = f"SELL permitido en BULLISH para tomar ganancias ({confidence:.1f}%)"
 
             # 🟡 FILTROS DE VOLATILIDAD - Ajustar según volatilidad del mercado (CENTRALIZADOS)
-            # 🚀 NUEVO: Detección de mercado bullish con alta volatilidad (oportunidad)
-            is_bullish_high_vol = (regime == 'BULLISH' and
-                                 market_confidence > 0.8 and
-                                 volatility == 'HIGH')
-
+            # ✅ CORREGIDO: Umbrales UNIFORMES con delta ADICIONAL por volatilidad
+            # 🎯 LÓGICA: En alta volatilidad, aplicar delta ADICIONAL sobre el umbral base
+            # 📊 Ejemplo: MIN_CONFIDENCE_THRESHOLD=0.70 (70%) + 0.02 (2%) = 0.72 (72%)
+            # 📊 ANTES: Umbral fijo 63% → INCORRECTO (menor que el base)
+            # 📊 AHORA: 70% + 2% = 72% → CORRECTO (mayor que el base)
             if volatility == 'HIGH' and fear_factor > 0.8:
                 # ✅ CENTRALIZADO: En mercado BULLISH, la volatilidad puede ser oportunidad
                 if regime == 'BULLISH' and market_confidence > 0.9:
@@ -1821,45 +1996,51 @@ class SimpleProfessionalTradingManager:
                         'BTCUSDT': base_threshold * 0.85,   # 🎯 MODERADO: 85% del umbral base (era 90%)
                         'ETHUSDT': base_threshold * 0.85,   # 🎯 MODERADO: 85% del umbral base (era 90%)
                         'BNBUSDT': base_threshold * 0.85,   # 🎯 MODERADO: 85% del umbral base (era 90%)
-                        'XRPUSDT': base_threshold * 0.85    # 🎯 MODERADO: 85% del umbral base (era 90%)
+                        'XRPUSDT': base_threshold * 0.85,   # 🎯 MODERADO: 85% del umbral base (era 90%)
+                        'DOTUSDT': base_threshold * 0.85,   # 🎯 MODERADO: 85% del umbral base (era 90%)
+                        'ADAUSDT': base_threshold * 0.85    # 🎯 MODERADO: 85% del umbral base (era 90%)
                     }
                     vol_adjustment = "MODERADO_BULLISH"
                 else:
-                    # ✅ CENTRALIZADO: Umbrales con +5% para alta volatilidad
+                    # ✅ CORREGIDO: Umbrales UNIFORMES con delta ADICIONAL por alta volatilidad
+                    # 🎯 OBJETIVO: Aplicar delta ADICIONAL sobre el umbral base (70% + 2% = 72%)
+                    # 📊 ANTES: Umbral fijo 63% → INCORRECTO
+                    # 📊 AHORA: base_threshold + 0.02 = 0.70 + 0.02 = 0.72 (72%) → CORRECTO
+                    volatility_delta = 0.02  # 2% adicional por alta volatilidad
                     volatility_thresholds = {
-                        'BTCUSDT': base_threshold * 1.05,   # ✅ VOLATILIDAD: +5% sobre base
-                        'ETHUSDT': base_threshold * 1.05,   # ✅ VOLATILIDAD: +5% sobre base
-                        'BNBUSDT': base_threshold * 1.05,   # ✅ VOLATILIDAD: +5% sobre base
-                        'XRPUSDT': base_threshold * 1.05    # ✅ VOLATILIDAD: +5% sobre base
+                        'BTCUSDT': base_threshold + volatility_delta,   # ✅ CORRECTO: 70% + 2% = 72%
+                        'ETHUSDT': base_threshold + volatility_delta,   # ✅ CORRECTO: 70% + 2% = 72%
+                        'BNBUSDT': base_threshold + volatility_delta,   # ✅ CORRECTO: 70% + 2% = 72%
+                        'XRPUSDT': base_threshold + volatility_delta,   # ✅ CORRECTO: 70% + 2% = 72%
+                        'DOTUSDT': base_threshold + volatility_delta,   # ✅ CORRECTO: 70% + 2% = 72%
+                        'ADAUSDT': base_threshold + volatility_delta    # ✅ CORRECTO: 70% + 2% = 72%
                     }
                     vol_adjustment = "ALTA_VOLATILIDAD"
 
                 if signal == 'BUY':
-                    required_vol_confidence = volatility_thresholds.get(symbol, base_threshold)  # ✅ CENTRALIZADO: Usar .env
-                    if confidence < required_vol_confidence:
+                    required_vol_confidence = volatility_thresholds.get(symbol, base_threshold + 0.02)  # ✅ CORRECTO: 70% + 2% = 72%
+                    if confidence < required_vol_confidence * 100:
                         signal = 'HOLD'
-                        filter_reason = f"Alta volatilidad ({vol_adjustment}) - {symbol} BUY requiere >{required_vol_confidence:.1f}% confianza"
+                        filter_reason = f"Alta volatilidad ({vol_adjustment}) - {symbol} BUY requiere >{required_vol_confidence * 100:.1f}% confianza"
                 elif signal == 'SELL':
-                    # 🎯 MODERADO: En bullish extremo, permitir SELL con confianza moderada
-                    if regime == 'BULLISH' and market_confidence > 0.9:
-                        min_sell_vol_conf = base_threshold * 0.95  # 🎯 MODERADO: 95% del umbral base (era 100%)
-                    elif regime == 'BULLISH' and market_confidence > 0.7:
-                        min_sell_vol_conf = base_threshold * 0.98  # 🎯 MODERADO: 98% para bullish moderado
-                    else:
-                        min_sell_vol_conf = base_threshold * 1.05 + 5  # ✅ VOLATILIDAD: +5% base + 5% extra
+                    # ✅ CORREGIDO: Umbral UNIFORME con delta ADICIONAL para SELL en alta volatilidad
+                    # 🎯 OBJETIVO: Aplicar delta ADICIONAL sobre el umbral base (70% + 2% = 72%)
+                    # 📊 ANTES: Umbral fijo 63% → INCORRECTO
+                    # 📊 AHORA: base_threshold + 0.02 = 0.70 + 0.02 = 0.72 (72%) → CORRECTO
+                    min_sell_vol_conf = base_threshold + 0.02  # ✅ CORRECTO: 70% + 2% = 72%
 
-                    if confidence < min_sell_vol_conf:
+                    if confidence < min_sell_vol_conf * 100:
                         signal = 'HOLD'
-                        filter_reason = f"Alta volatilidad ({vol_adjustment}) - SELL requiere >{min_sell_vol_conf:.1f}% confianza (actual: {confidence:.1f}%)"
+                        filter_reason = f"Alta volatilidad ({vol_adjustment}) - SELL requiere >{min_sell_vol_conf * 100:.1f}% confianza (actual: {confidence:.1f}%)"
 
             # 🔵 FILTROS ESPECÍFICOS POR ACTIVO (CENTRALIZADOS)
             if symbol == 'BTCUSDT':
                 # ✅ CENTRALIZADO: BTC como líder - permitir señales más flexibles
                 btc_trend = market_context.get('btc_trend_score', 0)
                 if signal == 'BUY' and btc_trend < -0.4:  # Solo en tendencia MUY bajista
-                    if confidence < base_threshold * 0.9:  # ✅ CENTRALIZADO: 90% del umbral base
+                    if confidence < base_threshold * 0.9 * 100:  # ✅ CENTRALIZADO: 90% del umbral base
                         signal = 'HOLD'
-                        filter_reason = f"BTC en tendencia muy bajista fuerte (trend: {btc_trend:.2f}) - BUY requiere >{base_threshold * 0.9:.1f}% confianza"
+                        filter_reason = f"BTC en tendencia muy bajista fuerte (trend: {btc_trend:.2f}) - BUY requiere >{base_threshold * 0.9 * 100:.1f}% confianza"
                     else:
                         filter_reason = f"BTC BUY permitido pese a tendencia bajista por alta confianza ({confidence:.1f}%)"
 
@@ -1876,11 +2057,11 @@ class SimpleProfessionalTradingManager:
 
                     required_alt_confidence = altcoin_thresholds.get(symbol, base_threshold * 0.9)
 
-                    if confidence >= required_alt_confidence:
-                        filter_reason = f"{symbol.replace('USDT', '')} permitido por alta confianza ({confidence:.1f}% > {required_alt_confidence}%) pese a underperformance"
+                    if confidence >= required_alt_confidence * 100:
+                        filter_reason = f"{symbol.replace('USDT', '')} permitido por alta confianza ({confidence:.1f}% > {required_alt_confidence * 100}%) pese a underperformance"
                     else:
                         signal = 'HOLD'
-                        filter_reason = f"Altcoins underperforming vs BTC - {symbol} BUY requiere >{required_alt_confidence}% confianza"
+                        filter_reason = f"Altcoins underperforming vs BTC - {symbol} BUY requiere >{required_alt_confidence * 100}% confianza"
 
             return signal, filter_reason
 
@@ -1890,16 +2071,14 @@ class SimpleProfessionalTradingManager:
 
     def _apply_signal_stability_filter(self, symbol: str, signal: str, confidence: float, current_price: float, market_context: Optional[Dict] = None) -> tuple:
         """
-        🛡️ FILTRO DE ESTABILIDAD Y COOLDOWN PARA SEÑALES
+        🛡️ FILTRO DE ESTABILIDAD DESACTIVADO - ENSEMBLE DE 3 MODELOS (1M, 3M, 5M)
         ---
-        Previene cambios frecuentes de señal mediante:
-        1. Sistema de cooldown por símbolo
-        2. Confirmación de señales para ETH
-        3. Protección contra ruido del modelo
-        4. Validación de consistencia temporal
+        DESACTIVADO: El ensemble de 3 modelos (1M, 3M, 5M) proporciona estabilidad natural
+        No se requiere filtro adicional de estabilidad ya que los modelos se complementan
+        Solo se mantiene protección específica para ETH
 
         Returns:
-            tuple: (señal_filtrada, razón_del_filtro)
+            tuple: (señal_original, razón_del_filtro)
         """
 
         try:
@@ -1917,15 +2096,9 @@ class SimpleProfessionalTradingManager:
             history = self.signal_history[symbol]
             cooldown_minutes = self.signal_cooldown.get(symbol, 10)
 
-            # ✅ VERIFICAR COOLDOWN GENERAL
-            if history['last_signal_time']:
-                time_since_last = (current_time - history['last_signal_time']).total_seconds() / 60
-
-                # Si estamos en cooldown y la señal cambió
-                if time_since_last < cooldown_minutes and history['last_signal'] != signal:
-                    # ✅ EXCEPCIÓN: Permitir si es señal HOLD (más conservador)
-                    if signal != 'HOLD':
-                        return 'HOLD', f"Cooldown activo: {time_since_last:.1f}min < {cooldown_minutes}min desde última señal {history['last_signal']}"
+            # ✅ COOLDOWN GENERAL DESACTIVADO - ENSEMBLE DE 3 MODELOS
+            # No se aplica cooldown general ya que el ensemble proporciona estabilidad natural
+            # Solo se mantiene tracking para estadísticas
 
             # ✅ PROTECCIÓN ESPECÍFICA PARA ETH
             if symbol == 'ETHUSDT':
@@ -1966,35 +2139,10 @@ class SimpleProfessionalTradingManager:
                 if signal == 'SELL' and history['consecutive_same_signal'] < required_confirmations:
                     return 'HOLD', f"ETH SELL requiere {required_confirmations} confirmaciones consecutivas (actual: {history['consecutive_same_signal']})"
 
-            # ✅ FILTRO DE CONFIANZA AUMENTADA PARA CAMBIOS DE SEÑAL (RELAJADO PARA ENSEMBLE)
-            if history['last_signal'] and history['last_signal'] != signal:
-                # ✅ RELAJADO: Con ensemble de modelos, las confianzas pueden ser más bajas pero válidas
-                # Verificar si el mercado es muy bullish usando el contexto recibido
-                market_is_very_bullish = market_context and \
-                                       market_context.get('regime') == 'BULLISH' and \
-                                       market_context.get('confidence', 0) > 0.9
-
-                if market_is_very_bullish:
-                    # 🎯 MODERADO: Umbrales moderadamente relajados para mercado muy bullish
-                    min_confidence_for_change = {
-                        'ETHUSDT': 55.0,  # 🎯 MODERADO: De 60% a 55% para ETH
-                        'BTCUSDT': 55.0,  # 🎯 MODERADO: De 60% a 55% para BTC
-                        'BNBUSDT': 55.0,  # 🎯 MODERADO: De 60% a 55% para BNB
-                        'XRPUSDT': 55.0   # 🎯 MODERADO: De 60% a 55% para XRP
-                    }.get(symbol, 52.0)
-                    signal_context = "MODERADO_BULLISH_VOLATIL"  # Contexto de señal, no secret
-                else:
-                    # 🎯 MODERADO: Umbrales moderados para ensemble en otros contextos
-                    min_confidence_for_change = {
-                        'ETHUSDT': 60.0,  # 🎯 MODERADO: De 65% a 60% para ETH
-                        'BTCUSDT': 60.0,  # 🎯 MODERADO: De 65% a 60% para BTC
-                        'BNBUSDT': 60.0,  # 🎯 MODERADO: De 65% a 60% para BNB
-                        'XRPUSDT': 60.0   # 🎯 MODERADO: De 65% a 60% para XRP
-                    }.get(symbol, 58.0)
-                    signal_context = "MODERADO_ENSEMBLE"
-
-                if confidence < min_confidence_for_change:
-                    return 'HOLD', f"Cambio de señal {history['last_signal']}→{signal} requiere >{min_confidence_for_change:.0f}% confianza (actual: {confidence:.1f}%) [{signal_context}]"
+            # ✅ FILTRO DE ESTABILIDAD DESACTIVADO - ENSEMBLE DE 3 MODELOS (1M, 3M, 5M)
+            # No se aplica filtro de confianza para cambios de señal
+            # El ensemble de 1M, 3M y 5M proporciona estabilidad natural
+            # DESACTIVADO: El ensemble de 3 modelos proporciona estabilidad natural
 
             # ✅ ACTUALIZAR HISTORIAL
             history['last_signal'] = signal
@@ -2004,7 +2152,7 @@ class SimpleProfessionalTradingManager:
             # Actualizar timestamp de última acción para el símbolo
             self.last_position_action[symbol] = current_time
 
-            return signal, f"Señal estable: {signal} con {confidence:.1f}% confianza"
+            return signal, f"FILTRO DESACTIVADO - Ensemble 3M (1M,3M,5M) proporciona estabilidad natural"
 
         except Exception as e:
             print(f"⚠️ Error en filtro de estabilidad para {symbol}: {e}")
@@ -2019,6 +2167,25 @@ class SimpleProfessionalTradingManager:
         balance_sufficient = signal_data.get('balance_sufficient', True)
 
         print(f"🔍 PROCESANDO SEÑAL: {symbol} {signal} ({confidence:.1f}%)")
+
+        # ✅ CRÍTICO: Verificar cooldown post-cierre ANTES de procesar cualquier señal BUY
+        if signal == 'BUY':
+            print(f"🔍 VERIFICANDO COOLDOWN POST-CIERRE PARA: {symbol}")
+            is_in_cooldown, remaining_time = self.is_in_post_close_cooldown(symbol)
+            if is_in_cooldown:
+                print(f"  🚫 SEÑAL BUY BLOQUEADA POR COOLDOWN POST-CIERRE: {symbol}")
+                print(f"  ⏰ Tiempo restante: {remaining_time}")
+                print(f"  🛑 RETORNANDO SIN PROCESAR SEÑAL")
+                await self._send_discord_notification(
+                    f"⏰ **COOLDOWN POST-CIERRE**\n"
+                    f"📊 {symbol}: {signal}\n"
+                    f"🚫 Razón: Cooldown activo\n"
+                    f"⏱️ Tiempo restante: {remaining_time}\n"
+                    f"🎯 Confianza: {confidence:.1f}%"
+                )
+                return
+            else:
+                print(f"  ✅ COOLDOWN CHECK PASADO: {symbol} puede procesar señal BUY")
 
         # Skip si es HOLD
         if signal == 'HOLD':
@@ -2067,6 +2234,19 @@ class SimpleProfessionalTradingManager:
         current_price = signal_data['current_price']
 
         print(f"    🚀 EVALUANDO NUEVA POSICIÓN: {symbol} {signal} ({confidence:.1f}%)")
+
+        # ✅ NUEVO: Verificar cooldown post-cierre (PREVENIR RECOMPRAS INMEDIATAS)
+        is_in_cooldown, remaining_time = self.is_in_post_close_cooldown(symbol)
+        if is_in_cooldown:
+            print(f"    ⏰ BLOQUEADO POR COOLDOWN POST-CIERRE: {symbol} - Tiempo restante: {remaining_time}")
+            await self._send_discord_notification(
+                f"⏰ **COOLDOWN POST-CIERRE**\n"
+                f"📊 {symbol}: {signal}\n"
+                f"🚫 Razón: Cooldown activo\n"
+                f"⏱️ Tiempo restante: {remaining_time}\n"
+                f"🎯 Confianza: {confidence:.1f}%"
+            )
+            return
 
         # ✅ NUEVO: Verificar protección post-pérdidas
         can_trade, protection_reason = self.loss_protection.can_open_position(symbol, confidence)
@@ -2421,6 +2601,19 @@ class SimpleProfessionalTradingManager:
             close_reason=reason,
             entry_time=position.entry_time
         )
+        
+        # ✅ NUEVO: Registrar cierre para cooldown post-cierre (PREVENIR RECOMPRAS INMEDIATAS)
+        print(f"🔔 REGISTRANDO COOLDOWN POST-CIERRE: {symbol}")
+        print(f"   📝 Razón de cierre: '{reason}'")
+        print(f"   💰 PnL: {pnl_percent:.2f}%")
+        
+        cooldown_minutes = self.register_position_close(
+            symbol=symbol,
+            close_type=reason,
+            pnl_percent=pnl_percent
+        )
+        
+        print(f"🛡️ COOLDOWN REGISTRADO EXITOSAMENTE: {symbol} por {cooldown_minutes} minutos")
 
         # Actualizar estadísticas
         self.session_pnl += pnl_usd
@@ -2440,6 +2633,11 @@ class SimpleProfessionalTradingManager:
         if order_id in self.portfolio_manager.position_registry:
             del self.portfolio_manager.position_registry[order_id]
             print(f"🗑️ Posición {order_id} eliminada del registry")
+
+        # ✅ NUEVO: Limpiar también el cache de trailing stop
+        if hasattr(self.portfolio_manager, 'trailing_cache') and order_id in self.portfolio_manager.trailing_cache:
+            del self.portfolio_manager.trailing_cache[order_id]
+            print(f"🗑️ Cache de trailing eliminado para {order_id}")
 
         # ✅ NUEVO: Actualizar timestamp de última acción para protección ETH
         if symbol == 'ETHUSDT':
@@ -2530,15 +2728,18 @@ class SimpleProfessionalTradingManager:
 
             # ✅ CONFIGURACIÓN: Límites específicos por par
             SYMBOL_LIMITS = {
-                'BTCUSDT': 20.0,  # BTC máximo 25% del portafolio
-                'ETHUSDT': 20.0,  # ETH máximo 25% del portafolio
-                'BNBUSDT': 30.0,  # BNB máximo 20% del portafolio
-                'XRPUSDT': 30.0,  # XRP máximo 30% del portafolio
-                'DOTUSDT': 30.0   # DOT máximo 30% del portafolio
+                'ADAUSDT': 20.0,  # ADA máximo 25% del portafolio
+                'BTCUSDT': 30.0,  # BTC máximo 25% del portafolio
+                'ETHUSDT': 30.0,  # ETH máximo 30% del portafolio
+                'BNBUSDT': 25.0,  # BNB máximo 25% del portafolio
+                'XRPUSDT': 20.0,  # XRP máximo 20% del portafolio
+                'DOTUSDT': 30.0,  # DOT máximo 30% del portafolio
+                'SOLUSDT': 20.0,  # SOL máximo 20% del portafolio (nuevo par activado)
+                'POLUSDT': 20.0  # POL máximo 20% del portafolio (nuevo par activado)
             }
 
             # ✅ PRIORIZACIÓN: Orden de preferencia para señales simultáneas
-            PRIORITY_ORDER = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'DOTUSDT']
+            PRIORITY_ORDER = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'DOTUSDT', 'SOLUSDT','ADAUSDT', 'POLUSDT']
 
             # ✅ DEBUG: Información del balance
             print(f"🔍 DEBUG DIVERSIFICACIÓN INTELIGENTE:")
@@ -2587,9 +2788,26 @@ class SimpleProfessionalTradingManager:
 
             # ✅ VALIDACIÓN 1: Máximo 3 posiciones por símbolo
             current_positions_count = symbol_exposures.get(symbol, {}).get('count', 0)
-            if current_positions_count >= 3:
+            
+            # ✅ CRÍTICO: Verificar sincronización entre contadores
+            portfolio_positions_count = len([pos for pos in self.portfolio_manager.position_registry.values() if pos.symbol == symbol])
+            risk_manager_positions_count = len([pos for pos in self.active_positions.values() if pos.symbol == symbol])
+            
+            print(f"🔍 VERIFICACIÓN SINCRONIZACIÓN POSICIONES {symbol}:")
+            print(f"   📊 Portfolio Manager: {portfolio_positions_count} posiciones")
+            print(f"   📊 Risk Manager: {risk_manager_positions_count} posiciones")
+            print(f"   📊 Symbol Exposures: {current_positions_count} posiciones")
+            
+            # ✅ CORRECCIÓN: Usar el contador más confiable (portfolio_manager)
+            if portfolio_positions_count >= 3:
                 print(f"🚫 DIVERSIFICACIÓN: Máximo 3 posiciones por símbolo alcanzado para {symbol}")
-                print(f"   📊 Posiciones actuales en {symbol}: {current_positions_count}/3")
+                print(f"   📊 Posiciones actuales en {symbol}: {portfolio_positions_count}/3")
+                
+                # ✅ NUEVO: Limpiar contador desincronizado del risk manager
+                if portfolio_positions_count != risk_manager_positions_count:
+                    print(f"   🔧 DESINCRONIZACIÓN DETECTADA: Limpiando contador del risk manager...")
+                    await self._cleanup_desynchronized_positions(symbol)
+                
                 raise Exception(f"Trade bloqueado por diversificación: Máximo 3 posiciones por símbolo en {symbol}")
 
             # ✅ CÁLCULO: Tamaño de nueva posición propuesta
@@ -2667,7 +2885,7 @@ class SimpleProfessionalTradingManager:
 
             # ✅ INFORMACIÓN: Mostrar análisis detallado
             print(f"✅ DIVERSIFICACIÓN: Trade aprobado para {symbol}")
-            print(f"   🎯 Límite específico: {symbol_limit}% (BTC:35%, ETH:25%, BNB:25%, XRP:15%)")
+            print(f"   🎯 Límite específico: {symbol_limit}% (BTC:35%, ETH:25%, BNB:25%, XRP:15%, ADA:20%)")
             print(f"   📊 Exposición actual en {symbol}: {current_symbol_exposure_percent:.1f}%")
             print(f"   📊 Nueva exposición en {symbol}: {new_symbol_exposure_percent:.1f}%/{symbol_limit}%")
             print(f"   💰 Tamaño propuesto: ${proposed_position_usd:.2f} ({base_size_percent:.1f}%)")
@@ -2705,7 +2923,7 @@ class SimpleProfessionalTradingManager:
                         f"📊 {symbol}: {signal_data['signal']}\n"
                         f"💡 {str(e).replace('Trade bloqueado por diversificación: ', '').replace('Trade pausado por priorización: ', '')}\n"
                         f"🎯 Confianza: {signal_data['confidence']:.1%}\n"
-                        f"🏆 Límites: BTC≤35%, ETH≤25%, BNB≤25%, XRP≤15%"
+                        f"🏆 Límites: BTC≤35%, ETH≤25%, BNB≤25%, XRP≤15%, ADA≤20%"
                     )
 
                 raise  # Re-lanzar bloqueos legítimos
@@ -2756,6 +2974,16 @@ class SimpleProfessionalTradingManager:
             # 3. ✅ NUEVO: Procesar cada posición individualmente con trailing stop
             for i, position in enumerate(snapshot.active_positions):
                 try:
+                    # ✅ CRÍTICO: Verificar que la posición aún existe en el registry
+                    if not position.order_id or position.order_id not in self.portfolio_manager.position_registry:
+                        print(f"⚠️ Posición {position.symbol} Pos #{position.order_id} no encontrada en registry, saltando...")
+                        continue
+
+                    # ✅ CRÍTICO: Verificar que no esté marcada como cerrada
+                    if hasattr(position, 'is_closing') and position.is_closing:
+                        print(f"⚠️ Posición {position.symbol} Pos #{position.order_id} ya está siendo cerrada, saltando...")
+                        continue
+
                     current_price = current_prices.get(position.symbol, position.current_price)
 
                     # Actualizar precio actual en la posición
@@ -2791,9 +3019,13 @@ class SimpleProfessionalTradingManager:
 
                     if stop_triggered or should_close:
                         reason = trigger_reason if stop_triggered else close_reason
-                        positions_to_close.append((updated_position, reason))
-
-                        print(f"🛑 Marcando para cierre: {updated_position.symbol} Pos #{updated_position.order_id} - {reason}")
+                        
+                        # ✅ CRÍTICO: Verificar nuevamente que la posición existe antes de marcarla para cierre
+                        if updated_position.order_id in self.portfolio_manager.position_registry:
+                            positions_to_close.append((updated_position, reason))
+                            print(f"🛑 Marcando para cierre: {updated_position.symbol} Pos #{updated_position.order_id} - {reason}")
+                        else:
+                            print(f"⚠️ Posición {updated_position.symbol} Pos #{updated_position.order_id} ya no existe en registry, omitiendo cierre")
 
                 except Exception as e:
                     print(f"❌ Error monitoreando {position.symbol}: {e}")
@@ -2862,6 +3094,11 @@ class SimpleProfessionalTradingManager:
 
             for position, reason in positions_and_reasons:
                 try:
+                    # ✅ CRÍTICO: Verificar que la posición aún existe en el registry
+                    if not position.order_id or position.order_id not in self.portfolio_manager.position_registry:
+                        print(f"⚠️ Posición {position.symbol} Pos #{position.order_id} ya no existe en registry, omitiendo cierre")
+                        continue
+
                     print(f"🛑 CERRANDO POSICIÓN {position.symbol} Pos #{position.order_id}:")
                     print(f"   📍 Entrada: ${position.entry_price:.4f}")
                     print(f"   💰 Actual: ${position.current_price:.4f}")
@@ -2906,10 +3143,33 @@ class SimpleProfessionalTradingManager:
                         f"{position.symbol}: {reason} - PnL: {real_pnl_percent:.2f}% - Order: {order_result.get('orderId', 'FAILED') if order_result else 'FAILED'}"
                     )
 
+                    # ✅ CRÍTICO: Registrar cierre para cooldown post-cierre (PREVENIR RECOMPRAS INMEDIATAS)
+                    print(f"🔔 REGISTRANDO COOLDOWN POST-CIERRE: {position.symbol}")
+                    print(f"   📝 Razón de cierre: '{reason}'")
+                    print(f"   💰 PnL: {real_pnl_percent:.2f}%")
+                    
+                    cooldown_minutes = self.register_position_close(
+                        symbol=position.symbol,
+                        close_type=reason,
+                        pnl_percent=real_pnl_percent
+                    )
+                    
+                    print(f"🛡️ COOLDOWN REGISTRADO EXITOSAMENTE: {position.symbol} por {cooldown_minutes} minutos")
+
                     # Actualizar métricas
                     self.metrics['total_trades'] += 1
                     if real_pnl_usd > 0:
                         self.metrics['profitable_trades'] += 1
+
+                    # ✅ CRÍTICO: Remover del portfolio_manager.position_registry
+                    if position.order_id in self.portfolio_manager.position_registry:
+                        del self.portfolio_manager.position_registry[position.order_id]
+                        print(f"🗑️ Posición {position.order_id} eliminada del registry")
+
+                    # ✅ NUEVO: Limpiar también el cache de trailing stop
+                    if hasattr(self.portfolio_manager, 'trailing_cache') and position.order_id in self.portfolio_manager.trailing_cache:
+                        del self.portfolio_manager.trailing_cache[position.order_id]
+                        print(f"🗑️ Cache de trailing eliminado para {position.order_id}")
 
                     print(f"✅ Posición {position.symbol} cerrada exitosamente")
 
@@ -3269,15 +3529,19 @@ class SimpleProfessionalTradingManager:
             print("▶️ Trading reanudado")
 
     async def emergency_stop(self):
-        """🚨 Parada de emergencia"""
+        """🚨 Parada de emergencia - SIN CERRAR POSICIONES"""
+        print("🚨 Parada de emergencia solicitada")
         self.status = TradingManagerStatus.EMERGENCY_STOP
 
-        # Cerrar todas las posiciones activas
-        for order_id in list(self.active_positions.keys()):
-            await self._close_position(order_id, "EMERGENCY_STOP")
+        # ✅ NO CERRAR POSICIONES - Solo cambiar estado
+        if self.active_positions:
+            print(f"⚠️ AVISO: {len(self.active_positions)} posiciones activas NO serán cerradas")
+            print(f"   📊 Las posiciones permanecen activas en Binance")
+            print(f"   🔄 El bot se puede reiniciar para continuar gestionándolas")
 
-        await self.database.log_event('CRITICAL', 'SYSTEM', 'Parada de emergencia activada')
-        print("🚨 PARADA DE EMERGENCIA ACTIVADA")
+        if self.database:
+            await self.database.log_event('CRITICAL', 'SYSTEM', 'Parada de emergencia activada - Posiciones preservadas')
+        print("🚨 PARADA DE EMERGENCIA ACTIVADA - Posiciones preservadas")
 
     async def get_system_status(self) -> Dict:
         """📊 Obtener estado completo del sistema"""
@@ -3321,34 +3585,36 @@ class SimpleProfessionalTradingManager:
         }
 
     async def shutdown(self):
-        """🔄 Apagado controlado del sistema"""
+        """🔄 Apagado controlado del sistema - SIN CERRAR POSICIONES"""
         print("🔄 Iniciando apagado del sistema...")
 
         self.status = TradingManagerStatus.STOPPED
 
-        # Cerrar posiciones si hay alguna activa
+        # ✅ NO CERRAR POSICIONES - Solo cambiar estado
         if self.active_positions:
-            print(f"📉 Cerrando {len(self.active_positions)} posiciones activas...")
-            for order_id in list(self.active_positions.keys()):
-                await self._close_position(order_id, "SYSTEM_SHUTDOWN")
+            print(f"⚠️ AVISO: {len(self.active_positions)} posiciones activas NO serán cerradas")
+            print(f"   📊 Las posiciones permanecen activas en Binance")
+            print(f"   🔄 El bot se puede reiniciar para continuar gestionándolas")
 
         # Guardar métricas finales
         await self._save_periodic_metrics()
 
         # Log final
-        await self.database.log_event('INFO', 'SYSTEM', 'Sistema apagado correctamente')
+        if self.database:
+            await self.database.log_event('INFO', 'SYSTEM', 'Sistema apagado correctamente - Posiciones preservadas')
 
-        print("✅ Sistema apagado correctamente")
+        print("✅ Sistema apagado correctamente - Posiciones preservadas")
+        print("💡 Las posiciones siguen generando PnL en Binance")
 
     async def _detect_market_regime_robust(self, market_data: Dict[str, List[float]]) -> Tuple[str, float]:
         """
-        🔍 DETECCIÓN ROBUSTA DE RÉGIMEN DE MERCADO - VERSIÓN RELAJADA
-        Sistema mejorado menos sensible para permitir más trading
+        🔍 DETECCIÓN ROBUSTA DE RÉGIMEN DE MERCADO - VERSIÓN SENSIBLE A BAJISTAS
+        Sistema optimizado para detectar movimientos bajistas con mayor sensibilidad
 
-        RELAJADO: Ajustado para ser menos restrictivo y permitir más oportunidades
+        SENSIBLE: Ajustado para detectar mejor los movimientos bajistas persistentes
         """
         try:
-            print(f"🔍 Detectando régimen de mercado robusto (versión relajada)...")
+            print(f"🔍 Detectando régimen de mercado robusto (versión sensible a bajistas)...")
 
             # 1. ANÁLISIS MULTI-PAR
             pair_regimes = {}
@@ -3365,7 +3631,7 @@ class SimpleProfessionalTradingManager:
 
                 # === INDICADORES POR PAR ===
 
-                # 1. Momentum multitimeframe (UMBRALES RELAJADOS)
+                # 1. Momentum multitimeframe (UMBRALES MUY RELAJADOS)
                 df['momentum_1h'] = df['close'].pct_change(12)   # 12 * 5m = 1h
                 df['momentum_4h'] = df['close'].pct_change(48)   # 48 * 5m = 4h
                 df['momentum_12h'] = df['close'].pct_change(144) # 144 * 5m = 12h
@@ -3398,73 +3664,73 @@ class SimpleProfessionalTradingManager:
                 df['recent_trend_2d'] = df['close'].pct_change(576)  # 576 * 5m = 48h
                 df['recent_slope'] = df['close'].rolling(144).apply(lambda x: np.polyfit(range(len(x)), x, 1)[0] if len(x) == 144 else 0, raw=True)
 
-                # === CLASIFICACIÓN POR PAR (RELAJADA) ===
+                # === CLASIFICACIÓN POR PAR (MUY RELAJADA) ===
                 latest = df.iloc[-1]
 
                 # Contar señales bullish y bearish
                 bullish_count = 0
                 bearish_count = 0
 
-                # ✅ RELAJADO: Umbrales de momentum MÁS PERMISIVOS
-                # Momentum 4h (relajado de 1% a 1.5%)
+                # ✅ SENSIBLE A BAJISTAS: Umbrales más sensibles para detectar movimientos bajistas
+                # Momentum 4h (más sensible: de 2.2% a 1.5%)
                 if not pd.isna(latest['momentum_4h']):
-                    if latest['momentum_4h'] > 0.015:  # +1.5% (era +1%)
+                    if latest['momentum_4h'] > 0.015:  # +1.5% (más sensible)
                         bullish_count += 2
-                    elif latest['momentum_4h'] < -0.015:  # -1.5% (era -1%)
-                        bearish_count += 2
+                    elif latest['momentum_4h'] < -0.015:  # -1.5% (más sensible)
+                        bearish_count += 3  # Más peso para señales bajistas
 
-                # Momentum 12h (relajado de 2.5% a 3.5%)
+                # Momentum 12h (más sensible: de 4.5% a 2.5%)
                 if not pd.isna(latest['momentum_12h']):
-                    if latest['momentum_12h'] > 0.035:  # +3.5% (era +2.5%)
+                    if latest['momentum_12h'] > 0.025:  # +2.5% (más sensible)
                         bullish_count += 3
-                    elif latest['momentum_12h'] < -0.035:  # -3.5% (era -2.5%)
-                        bearish_count += 3
+                    elif latest['momentum_12h'] < -0.025:  # -2.5% (más sensible)
+                        bearish_count += 4  # Más peso para señales bajistas
 
-                # Momentum 24h (relajado de 3% a 4%)
+                # Momentum 24h (más sensible: de 5.5% a 3.0%)
                 if not pd.isna(latest['momentum_24h']):
-                    if latest['momentum_24h'] > 0.04:  # +4% (era +3%)
+                    if latest['momentum_24h'] > 0.030:  # +3.0% (más sensible)
                         bullish_count += 4
-                    elif latest['momentum_24h'] < -0.04:  # -4% (era -3%)
-                        bearish_count += 4
+                    elif latest['momentum_24h'] < -0.030:  # -3.0% (más sensible)
+                        bearish_count += 5  # Más peso para señales bajistas
 
-                # Trend reciente de 2 días (relajado de 4% a 5%)
+                # Trend reciente de 2 días (más sensible: de 6.5% a 3.5%)
                 if not pd.isna(latest['recent_trend_2d']):
-                    if latest['recent_trend_2d'] > 0.05:  # +5% (era +4%)
+                    if latest['recent_trend_2d'] > 0.035:  # +3.5% (más sensible)
                         bullish_count += 3
-                    elif latest['recent_trend_2d'] < -0.05:  # -5% (era -4%)
-                        bearish_count += 4  # Reducido de 5 a 4
+                    elif latest['recent_trend_2d'] < -0.035:  # -3.5% (más sensible)
+                        bearish_count += 5  # Más peso para señales bajistas
 
-                # Señales de MA (umbrales relajados)
+                # Señales de MA (más sensibles)
                 if not pd.isna(latest['ma_trend']):
-                    if latest['ma_trend'] > 0.008 and latest['ma_direction']:  # +0.8% (era +0.5%)
+                    if latest['ma_trend'] > 0.008 and latest['ma_direction']:  # +0.8% (más sensible)
                         bullish_count += 2
-                    elif latest['ma_trend'] < -0.008 and not latest['ma_direction']:  # -0.8% (era -0.5%)
-                        bearish_count += 2
+                    elif latest['ma_trend'] < -0.008 and not latest['ma_direction']:  # -0.8% (más sensible)
+                        bearish_count += 3  # Más peso para señales bajistas
 
-                # EMA trend adicional (relajado)
+                # EMA trend adicional (más sensible)
                 if not pd.isna(latest['ema_trend']):
-                    if latest['ema_trend'] < -0.015:  # -1.5% (era -1%)
-                        bearish_count += 2
+                    if latest['ema_trend'] < -0.015:  # -1.5% (más sensible)
+                        bearish_count += 3  # Más peso para señales bajistas
 
-                # RSI con contexto de momentum (relajado)
+                # RSI con contexto de momentum (más sensible)
                 if not pd.isna(latest['rsi']):
                     if latest['rsi'] > 70 and not pd.isna(latest['momentum_1h']) and latest['momentum_1h'] > 0:
                         bullish_count += 1
                     elif latest['rsi'] < 30 and not pd.isna(latest['momentum_1h']) and latest['momentum_1h'] < 0:
-                        bearish_count += 1
-                    # RSI en zona de venta pero no extrema (relajado)
+                        bearish_count += 2  # Más peso para señales bajistas
+                    # RSI en zona de venta pero no extrema (más sensible)
                     elif 40 < latest['rsi'] < 60 and not pd.isna(latest['momentum_4h']) and latest['momentum_4h'] < -0.008:
-                        bearish_count += 1  # Momentum bajista con RSI neutral
+                        bearish_count += 2  # Momentum bajista con RSI neutral (más sensible)
 
-                # Pendiente reciente negativa (relajado)
+                # Pendiente reciente negativa (más sensible)
                 if not pd.isna(latest['recent_slope']) and latest['recent_slope'] < -0.8:
-                    bearish_count += 2
+                    bearish_count += 3  # Más peso para señales bajistas
 
-                # ✅ CLASIFICACIÓN RELAJADA: Más permisiva
-                if bearish_count > bullish_count + 2:  # ✅ RELAJADO: Requiere más diferencia
+                # ✅ CLASIFICACIÓN SENSIBLE A BAJISTAS: Más sensible para detectar movimientos bajistas
+                if bearish_count > bullish_count + 2:  # ✅ SENSIBLE: Requiere 2+ diferencia (más sensible)
                     pair_regime = 'BEARISH'
                     bearish_signals += bearish_count
-                elif bullish_count > bearish_count + 1:  # Mantener umbral para bullish
+                elif bullish_count > bearish_count + 3:  # ✅ SENSIBLE: Requiere 3+ diferencia (menos sensible para alcistas)
                     pair_regime = 'BULLISH'
                     bullish_signals += bullish_count
                 else:
@@ -3515,40 +3781,46 @@ class SimpleProfessionalTradingManager:
             max_votes = max(regime_votes.values())
             consensus_strength = max_votes / total_pairs
 
-            # 4. ✅ CLASIFICACIÓN FINAL RELAJADA
+            # 4. ✅ CLASIFICACIÓN FINAL SENSIBLE A BAJISTAS
 
-            # ✅ RELAJADO: Si hay unanimidad BEARISH (4 votos), debe ser BEARISH
-            if regime_votes['BEARISH'] == total_pairs and regime_votes['BEARISH'] > 0:
+            # ✅ SENSIBLE: Más fácil detectar BEARISH
+            if regime_votes['BEARISH'] >= total_pairs * 0.6:  # 60% de pares bearish
                 final_regime = 'BEARISH'
-                confidence = 0.9  # ✅ RELAJADO: De 0.95 a 0.9
-                print(f"   🔴 UNANIMIDAD BEARISH: {regime_votes['BEARISH']}/{total_pairs} pares → BEARISH forzado")
+                confidence = 0.8  # ✅ SENSIBLE: Confianza alta para BEARISH
+                print(f"   🔴 MAYORÍA BEARISH: {regime_votes['BEARISH']}/{total_pairs} pares → BEARISH detectado")
 
-            # Umbrales RELAJADOS para mayor permisividad
+            # Umbrales SENSIBLES para detectar mejor movimientos bajistas
             elif (regime_votes['BEARISH'] >= regime_votes['BULLISH'] and
-                  bearish_ratio > 0.4 and  # ✅ RELAJADO: De 0.3 a 0.4
-                  consensus_strength > 0.4):  # ✅ RELAJADO: De 0.3 a 0.4
+                  bearish_ratio > 0.4 and  # ✅ SENSIBLE: De 0.5 a 0.4 (más sensible)
+                  consensus_strength > 0.4):  # ✅ SENSIBLE: De 0.5 a 0.4 (más sensible)
                 final_regime = 'BEARISH'
-                confidence = min(0.9, 0.6 + (bearish_ratio - 0.4) * 0.8 + (consensus_strength - 0.4) * 0.6)
+                confidence = min(0.8, 0.5 + (bearish_ratio - 0.4) * 0.8 + (consensus_strength - 0.4) * 0.6)
 
-            elif (regime_votes['BULLISH'] > regime_votes['BEARISH'] + 1 and
-                  bullish_ratio > 0.5 and  # ✅ RELAJADO: De 0.55 a 0.5
-                  consensus_strength > 0.4):  # ✅ RELAJADO: De 0.5 a 0.4
+            elif (regime_votes['BULLISH'] > regime_votes['BEARISH'] + 2 and
+                  bullish_ratio > 0.6 and  # ✅ SENSIBLE: De 0.55 a 0.6 (menos sensible para alcistas)
+                  consensus_strength > 0.6):  # ✅ SENSIBLE: De 0.5 a 0.6 (menos sensible para alcistas)
                 final_regime = 'BULLISH'
-                confidence = min(0.9, 0.5 + (bullish_ratio - 0.5) + (consensus_strength - 0.4))
+                confidence = min(0.8, 0.5 + (bullish_ratio - 0.6) + (consensus_strength - 0.6))
 
             else:
                 final_regime = 'NEUTRAL'
                 confidence = 0.5 + (1 - consensus_strength) * 0.3  # Mayor incertidumbre
 
-            # 5. ✅ OVERRIDE RELAJADO PARA MERCADOS CLARAMENTE BAJISTAS
-            # Si la mayoría de pares muestran tendencia bajista de 2 días, forzar BEARISH
+            # 5. ✅ OVERRIDE SENSIBLE PARA MERCADOS CLARAMENTE BAJISTAS
+            # Si la mayoría de pares muestran tendencia bajista de 2 días
             valid_trends = [data['recent_trend_2d'] for data in pair_regimes.values() if data['recent_trend_2d'] != 0]
             if valid_trends:
                 avg_trend_2d = np.mean(valid_trends)
-                if avg_trend_2d < -0.04 and final_regime == 'NEUTRAL':  # ✅ RELAJADO: De -3% a -4%
+                # ✅ SENSIBLE: Más fácil detectar tendencias bajistas
+                if avg_trend_2d < -0.03 and final_regime == 'NEUTRAL':  # ✅ SENSIBLE: De -6% a -3% (más sensible)
                     final_regime = 'BEARISH'
-                    confidence = 0.7  # ✅ RELAJADO: De 0.75 a 0.7
-                    print(f"   🔴 OVERRIDE: Tendencia 2d promedio {avg_trend_2d:.3f} < -4% → BEARISH forzado")
+                    confidence = 0.7  # ✅ SENSIBLE: De 0.65 a 0.7 (más confianza)
+                    print(f"   🔴 OVERRIDE: Tendencia 2d promedio {avg_trend_2d:.3f} < -3% → BEARISH forzado")
+                # ✅ SENSIBLE: Override adicional para tendencias muy bajistas
+                elif avg_trend_2d < -0.05:  # ✅ SENSIBLE: -5% o más
+                    final_regime = 'BEARISH'
+                    confidence = 0.75  # ✅ SENSIBLE: Alta confianza
+                    print(f"   🔴 OVERRIDE FUERTE: Tendencia 2d promedio {avg_trend_2d:.3f} < -5% → BEARISH forzado")
             else:
                 avg_trend_2d = 0.0
 
@@ -3638,9 +3910,9 @@ class SimpleProfessionalTradingManager:
         Evalúa si hay suficientes señales consecutivas para ejecutar reversión
 
         Configuración por símbolo:
-        - ETHUSDT: Requiere 3 señales consecutivas de reversión
-        - BTCUSDT/BNBUSDT/XRPUSDT: Requieren 2 señales consecutivas
-        - Timeout: 30 minutos entre señales para mantener el tracking activo
+        - TODOS LOS SÍMBOLOS: Requieren 20 señales consecutivas de reversión (MUY ESTRICTO)
+        - Timeout: 1.5 minutos entre señales para mantener el tracking activo
+        - Sistema diseñado para máxima estabilidad y evitar reversiones prematuras
 
         Returns:
             tuple: (should_execute_reversal: bool, reason: str)
@@ -3651,8 +3923,8 @@ class SimpleProfessionalTradingManager:
 
             # Obtener configuración para este símbolo
             config = self.reversal_config.get(symbol, {
-                'required_consecutive_signals': 3,
-                'timeout_minutes': 5,  # ✅ REDUCIDO: 5 minutos por defecto
+                'required_consecutive_signals': 20,  # ✅ MUY ESTRICTO: 20 señales por defecto
+                'timeout_minutes': 5,  # ✅ MANTENER: 5 minutos por defecto
                 'min_confidence_per_signal': 80.0,
                 'cumulative_confidence_threshold': 85.0
             })
@@ -3668,7 +3940,7 @@ class SimpleProfessionalTradingManager:
 
             tracking = self.reversal_tracking[symbol]
 
-            # ✅ LIMPIEZA AUTOMÁTICA: Verificar timeout
+            # ✅ LIMPIEZA AUTOMÁTICA: Verificar timeout (1.5 minutos)
             if tracking['last_signal_time']:
                 time_since_last = (current_time - tracking['last_signal_time']).total_seconds() / 60
                 if time_since_last > config['timeout_minutes']:
@@ -3794,7 +4066,7 @@ class SimpleProfessionalTradingManager:
 
                 active_tracking_count += 1
                 config = self.reversal_config.get(symbol, {})
-                required_count = config.get('required_consecutive_signals', 2)
+                required_count = config.get('required_consecutive_signals', 20)  # ✅ MUY ESTRICTO: 20 señales por defecto
                 current_count = len(tracking['consecutive_signals'])
 
                 # Calcular tiempo desde primera señal
@@ -3854,6 +4126,64 @@ class SimpleProfessionalTradingManager:
             print(f"❌ Error generando reporte de tracking de reversión: {e}")
             return f"\n🔄 **TRACKING DE REVERSIÓN:** Error generando reporte: {e}\n"
 
+    async def _generate_sync_diagnosis_section(self) -> str:
+        """
+        🔍 Generar sección de diagnóstico de sincronización para el reporte TCN
+        """
+        try:
+            if not self.portfolio_manager:
+                return "\n🔍 **SINCRONIZACIÓN:** Portfolio Manager no disponible\n"
+
+            risk_manager_count = len(self.active_positions)
+            portfolio_count = len(self.portfolio_manager.position_registry)
+            
+            sync_section = f"""
+
+🔍 **DIAGNÓSTICO DE SINCRONIZACIÓN**
+📊 **Risk Manager:** {risk_manager_count} posiciones
+📊 **Portfolio Manager:** {portfolio_count} posiciones
+"""
+
+            if risk_manager_count == portfolio_count:
+                sync_section += "✅ **Estado:** Sincronización correcta\n"
+            else:
+                sync_section += f"❌ **Estado:** DESINCRONIZACIÓN detectada ({abs(risk_manager_count - portfolio_count)} diferencia)\n"
+                sync_section += "🔧 **Acción:** Se requiere limpieza automática\n"
+
+            # Análisis por símbolo (solo si hay desincronización)
+            if risk_manager_count != portfolio_count:
+                sync_section += "\n📊 **ANÁLISIS POR SÍMBOLO:**\n"
+                
+                # Agrupar posiciones por símbolo
+                portfolio_by_symbol = {}
+                for pos in self.portfolio_manager.position_registry.values():
+                    if pos.symbol not in portfolio_by_symbol:
+                        portfolio_by_symbol[pos.symbol] = []
+                    portfolio_by_symbol[pos.symbol].append(pos)
+                
+                risk_by_symbol = {}
+                for pos in self.active_positions.values():
+                    if pos.symbol not in risk_by_symbol:
+                        risk_by_symbol[pos.symbol] = []
+                    risk_by_symbol[pos.symbol].append(pos)
+                
+                # Mostrar diferencias
+                all_symbols = set(portfolio_by_symbol.keys()) | set(risk_by_symbol.keys())
+                for symbol in sorted(all_symbols):
+                    portfolio_count = len(portfolio_by_symbol.get(symbol, []))
+                    risk_count = len(risk_by_symbol.get(symbol, []))
+                    
+                    if portfolio_count != risk_count:
+                        sync_section += f"   ❌ {symbol}: Portfolio={portfolio_count}, Risk={risk_count}\n"
+                    else:
+                        sync_section += f"   ✅ {symbol}: {portfolio_count} posiciones\n"
+
+            return sync_section
+
+        except Exception as e:
+            print(f"⚠️ Error generando sección de diagnóstico de sincronización: {e}")
+            return f"\n🔍 **SINCRONIZACIÓN:** Error generando diagnóstico: {e}\n"
+
     async def _cleanup_stale_reversal_tracking(self):
         """
         🧹 LIMPIEZA AUTOMÁTICA DE TRACKING COLGADO
@@ -3871,7 +4201,7 @@ class SimpleProfessionalTradingManager:
                 return
 
             time_since_cleanup = (current_time - self._last_cleanup_time).total_seconds() / 60
-            if time_since_cleanup < 5:  # 5 minutos
+            if time_since_cleanup < 1.5:  # 1.5 minutos
                 return
 
             self._last_cleanup_time = current_time
@@ -3889,8 +4219,8 @@ class SimpleProfessionalTradingManager:
                     continue
 
                 # Verificar timeout
-                config = self.reversal_config.get(symbol, {'timeout_minutes': 5})  # ✅ REDUCIDO: 5 minutos por defecto
-                timeout_minutes = config.get('timeout_minutes', 5)  # ✅ REDUCIDO: 5 minutos por defecto
+                config = self.reversal_config.get(symbol, {'timeout_minutes': 1.5})  # ✅ AJUSTE: 1.5 minutos por defecto
+                timeout_minutes = config.get('timeout_minutes', 1.5)  # ✅ AJUSTE: 1.5 minutos por defecto
 
                 time_since_last = (current_time - tracking['last_signal_time']).total_seconds() / 60
 
@@ -3913,6 +4243,415 @@ class SimpleProfessionalTradingManager:
 
         except Exception as e:
             print(f"❌ Error en limpieza automática de tracking: {e}")
+
+    def register_position_close(self, symbol: str, close_type: str, pnl_percent: float):
+        """
+        📝 Registrar el cierre de una posición para aplicar cooldown post-cierre
+        ---
+        Args:
+            symbol: Símbolo de la posición cerrada
+            close_type: Tipo de cierre detectado por el sistema
+            pnl_percent: Porcentaje de PnL al cerrar
+        """
+        from datetime import datetime, timedelta
+        
+        current_time = datetime.now()
+        
+        # ✅ MEJORADO: Detección más robusta del tipo de cierre
+        print(f"🔍 ANALIZANDO TIPO DE CIERRE: {symbol}")
+        print(f"   📊 close_type recibido: '{close_type}'")
+        print(f"   📏 Longitud del close_type: {len(close_type)}")
+        print(f"   🔤 close_type uppercase: '{close_type.upper()}'")
+        print(f"   💰 PnL: {pnl_percent:.2f}%")
+        
+        # Mapear diferentes posibles nombres de cierres
+        trailing_stop_keywords = ['TRAILING_STOP', 'trailing_stop', 'trailing stop', 'TRAIL', 'trail']
+        reversal_keywords = ['REVERSIÓN_CONSECUTIVA', 'reversal', 'reversión', 'REVERSAL']
+        
+        print(f"   🔍 Keywords de trailing stop: {trailing_stop_keywords}")
+        print(f"   🔍 Keywords de reversión: {reversal_keywords}")
+        print(f"   🔍 Verificando si '{close_type.upper()}' contiene alguna keyword...")
+        
+        trailing_matches = []
+        reversal_matches = []
+        
+        for keyword in trailing_stop_keywords:
+            if keyword.upper() in close_type.upper():
+                trailing_matches.append(keyword)
+                
+        for keyword in reversal_keywords:
+            if keyword.upper() in close_type.upper():
+                reversal_matches.append(keyword)
+                
+        print(f"   ✅ Keywords trailing stop encontradas: {trailing_matches}")
+        print(f"   ✅ Keywords reversión encontradas: {reversal_matches}")
+        
+        is_trailing_stop = len(trailing_matches) > 0
+        is_reversal = len(reversal_matches) > 0
+        
+        if is_reversal:
+            actual_close_type = 'reversal_close'
+            print(f"   ✅ DETECTADO: Cierre por REVERSIÓN CONSECUTIVA")
+            print(f"   🎯 Será mapeado a: {actual_close_type}")
+        elif is_trailing_stop:
+            actual_close_type = 'trailing_stop_close'
+            print(f"   ✅ DETECTADO: Cierre por TRAILING STOP")
+            print(f"   🎯 Será mapeado a: {actual_close_type}")
+        elif pnl_percent > 0:
+            actual_close_type = 'profit_close'
+            print(f"   ✅ DETECTADO: Cierre con GANANCIA")
+            print(f"   🎯 Será mapeado a: {actual_close_type}")
+        else:
+            actual_close_type = 'loss_close'
+            print(f"   ✅ DETECTADO: Cierre con PÉRDIDA")
+            print(f"   🎯 Será mapeado a: {actual_close_type}")
+            
+        print(f"   📋 RESULTADO FINAL: close_type='{close_type}' → actual_close_type='{actual_close_type}'")
+        
+        # Registrar el cierre
+        self.recent_closes[symbol] = {
+            'last_close_time': current_time,
+            'close_type': actual_close_type,
+            'pnl_percent': pnl_percent,
+            'original_close_type': close_type
+        }
+        
+        # Aplicar cooldown específico
+        print(f"   🔍 Buscando cooldown para: symbol='{symbol}', close_type='{actual_close_type}'")
+        symbol_cooldowns = self.post_close_cooldown.get(symbol, {})
+        print(f"   📊 Cooldowns disponibles para {symbol}: {symbol_cooldowns}")
+        
+        cooldown_minutes = symbol_cooldowns.get(actual_close_type, 5)
+        print(f"   ⏰ Cooldown obtenido: {cooldown_minutes} minutos")
+        
+        if cooldown_minutes == 5:
+            print(f"   ⚠️ USANDO COOLDOWN POR DEFECTO (5min) - Verifica configuración")
+        
+        print(f"🛡️ COOLDOWN POST-CIERRE REGISTRADO: {symbol}")
+        print(f"   🕐 Hora: {current_time.strftime('%H:%M:%S')}")
+        print(f"   🎯 Tipo final: {actual_close_type}")
+        print(f"   📝 Razón original: {close_type}")
+        print(f"   💰 PnL: {pnl_percent:.2f}%")
+        print(f"   ⏰ Cooldown aplicado: {cooldown_minutes} minutos")
+        print(f"   🚫 Próxima compra permitida: {(current_time + timedelta(minutes=cooldown_minutes)).strftime('%H:%M:%S')}")
+        
+        return cooldown_minutes
+
+    def is_in_post_close_cooldown(self, symbol: str) -> tuple[bool, str]:
+        """
+        🔍 Verificar si un símbolo está en cooldown post-cierre
+        ---
+        Returns:
+            (is_in_cooldown, remaining_time_str)
+        """
+        if symbol not in self.recent_closes:
+            print(f"🔍 COOLDOWN CHECK: {symbol} - No hay cierres recientes registrados")
+            return False, ""
+        
+        close_info = self.recent_closes[symbol]
+        close_time = close_info['last_close_time']
+        close_type = close_info['close_type']
+        original_close_type = close_info.get('original_close_type', 'N/A')
+        pnl_percent = close_info.get('pnl_percent', 0.0)
+        
+        # Obtener cooldown específico para este tipo de cierre
+        cooldown_minutes = self.post_close_cooldown.get(symbol, {}).get(close_type, 5)
+        
+        # Calcular tiempo transcurrido
+        from datetime import datetime
+        current_time = datetime.now()
+        elapsed_minutes = (current_time - close_time).total_seconds() / 60
+        
+        print(f"🔍 COOLDOWN CHECK: {symbol}")
+        print(f"   🕐 Cerrado: {close_time.strftime('%H:%M:%S')}")
+        print(f"   📊 Tipo: {close_type} (original: {original_close_type})")
+        print(f"   💰 PnL: {pnl_percent:.2f}%")
+        print(f"   ⏰ Cooldown: {cooldown_minutes}m")
+        print(f"   ⌛ Transcurrido: {elapsed_minutes:.1f}m")
+        
+        if elapsed_minutes < cooldown_minutes:
+            remaining_minutes = cooldown_minutes - elapsed_minutes
+            if remaining_minutes >= 1:
+                remaining_time_str = f"{remaining_minutes:.0f}m"
+            else:
+                remaining_seconds = remaining_minutes * 60
+                remaining_time_str = f"{remaining_seconds:.0f}s"
+            
+            print(f"   🚫 COOLDOWN ACTIVO - Restante: {remaining_time_str}")
+            return True, remaining_time_str
+        
+        print(f"   ✅ COOLDOWN EXPIRADO - Puede operar")
+        return False, ""
+
+    def cleanup_expired_post_close_cooldowns(self):
+        """
+        🧹 Limpiar cooldowns post-cierre expirados automáticamente
+        """
+        from datetime import datetime
+        
+        current_time = datetime.now()
+        expired_symbols = []
+        
+        for symbol, close_info in self.recent_closes.items():
+            close_time = close_info['last_close_time']
+            close_type = close_info['close_type']
+                        
+            # Obtener cooldown específico para este tipo de cierre
+            cooldown_minutes = self.post_close_cooldown.get(symbol, {}).get(close_type, 5)
+            
+            # Calcular tiempo transcurrido
+            elapsed_minutes = (current_time - close_time).total_seconds() / 60
+            
+            if elapsed_minutes >= cooldown_minutes:
+                expired_symbols.append(symbol)
+        
+        # Limpiar cooldowns expirados
+        for symbol in expired_symbols:
+            close_info = self.recent_closes.pop(symbol)
+            print(f"🧹 COOLDOWN POST-CIERRE EXPIRADO: {symbol} - Tipo: {close_info['close_type']} - PnL: {close_info['pnl_percent']:.2f}%")
+        
+        if expired_symbols:
+            print(f"✅ {len(expired_symbols)} cooldown(s) post-cierre limpiado(s) automáticamente")
+
+    async def _cleanup_desynchronized_positions(self, symbol: str):
+        """
+        🔧 LIMPIAR POSICIONES DESINCRONIZADAS ENTRE CONTADORES
+        ---
+        Soluciona el problema de contadores diferentes entre:
+        - self.active_positions (Risk Manager)
+        - self.portfolio_manager.position_registry (Portfolio Manager)
+        """
+        try:
+            print(f"🔧 LIMPIEZA DE DESINCRONIZACIÓN para {symbol}...")
+            
+            # Obtener posiciones reales del portfolio manager
+            portfolio_positions = [pos for pos in self.portfolio_manager.position_registry.values() if pos.symbol == symbol]
+            portfolio_order_ids = {pos.order_id for pos in portfolio_positions if pos.order_id}
+            
+            # Obtener posiciones del risk manager
+            risk_manager_positions = [pos for pos in self.active_positions.values() if pos.symbol == symbol]
+            risk_manager_order_ids = {pos.order_id for pos in risk_manager_positions if pos.order_id}
+            
+            print(f"   📊 Portfolio Manager: {len(portfolio_positions)} posiciones con IDs: {portfolio_order_ids}")
+            print(f"   📊 Risk Manager: {len(risk_manager_positions)} posiciones con IDs: {risk_manager_order_ids}")
+            
+            # Encontrar posiciones fantasma en risk manager
+            ghost_order_ids = risk_manager_order_ids - portfolio_order_ids
+            
+            if ghost_order_ids:
+                print(f"   🧟 POSICIONES FANTASMA detectadas: {ghost_order_ids}")
+                
+                # Eliminar posiciones fantasma del risk manager
+                for ghost_id in ghost_order_ids:
+                    if ghost_id in self.active_positions:
+                        del self.active_positions[ghost_id]
+                        print(f"      🗑️ Eliminada posición fantasma {ghost_id}")
+                
+                print(f"   ✅ Limpieza completada: {len(ghost_order_ids)} posición(es) fantasma eliminada(s)")
+            else:
+                print(f"   ✅ No se detectaron posiciones fantasma")
+                
+            # ✅ NUEVO: Verificar si hay posiciones en portfolio que no están en risk manager
+            missing_in_risk = portfolio_order_ids - risk_manager_order_ids
+            
+            if missing_in_risk:
+                print(f"   ⚠️ POSICIONES FALTANTES en Risk Manager: {missing_in_risk}")
+                print(f"      💡 Estas posiciones están en Portfolio pero no en Risk Manager")
+                print(f"      🔧 Se requiere sincronización manual o reinicio del bot")
+                
+            # Verificar sincronización después de la limpieza
+            final_portfolio_count = len([pos for pos in self.portfolio_manager.position_registry.values() if pos.symbol == symbol])
+            final_risk_count = len([pos for pos in self.active_positions.values() if pos.symbol == symbol])
+            
+            print(f"   📊 Sincronización final: Portfolio={final_portfolio_count}, Risk={final_risk_count}")
+            
+            if final_portfolio_count == final_risk_count:
+                print(f"   ✅ SINCRONIZACIÓN RESTAURADA para {symbol}")
+            else:
+                print(f"   ⚠️ ADVERTENCIA: Sincronización incompleta para {symbol}")
+                
+        except Exception as e:
+            print(f"❌ Error en limpieza de desincronización para {symbol}: {e}")
+
+    async def diagnose_position_synchronization(self):
+        """
+        🔍 DIAGNÓSTICO COMPLETO DE SINCRONIZACIÓN DE POSICIONES
+        ---
+        Identifica y reporta problemas de sincronización entre contadores
+        """
+        try:
+            print("🔍 DIAGNÓSTICO DE SINCRONIZACIÓN DE POSICIONES")
+            print("=" * 60)
+            
+            # Contadores principales
+            risk_manager_count = len(self.active_positions)
+            portfolio_count = len(self.portfolio_manager.position_registry) if self.portfolio_manager else 0
+            
+            print(f"📊 CONTADORES PRINCIPALES:")
+            print(f"   🛡️ Risk Manager (self.active_positions): {risk_manager_count}")
+            print(f"   💼 Portfolio Manager (position_registry): {portfolio_count}")
+            
+            if risk_manager_count != portfolio_count:
+                print(f"   ❌ DESINCRONIZACIÓN DETECTADA: Diferencia de {abs(risk_manager_count - portfolio_count)} posiciones")
+            else:
+                print(f"   ✅ SINCRONIZACIÓN CORRECTA")
+            
+            # Análisis por símbolo
+            print(f"\n📊 ANÁLISIS POR SÍMBOLO:")
+            
+            if self.portfolio_manager:
+                # Agrupar posiciones del portfolio por símbolo
+                portfolio_by_symbol = {}
+                for pos in self.portfolio_manager.position_registry.values():
+                    if pos.symbol not in portfolio_by_symbol:
+                        portfolio_by_symbol[pos.symbol] = []
+                    portfolio_by_symbol[pos.symbol].append(pos)
+                
+                # Agrupar posiciones del risk manager por símbolo
+                risk_by_symbol = {}
+                for pos in self.active_positions.values():
+                    if pos.symbol not in risk_by_symbol:
+                        risk_by_symbol[pos.symbol] = []
+                    risk_by_symbol[pos.symbol].append(pos)
+                
+                # Comparar por símbolo
+                all_symbols = set(portfolio_by_symbol.keys()) | set(risk_by_symbol.keys())
+                
+                for symbol in sorted(all_symbols):
+                    portfolio_pos_count = len(portfolio_by_symbol.get(symbol, []))
+                    risk_pos_count = len(risk_by_symbol.get(symbol, []))
+                    
+                    status = "✅" if portfolio_pos_count == risk_pos_count else "❌"
+                    print(f"   {status} {symbol}: Portfolio={portfolio_pos_count}, Risk={risk_pos_count}")
+                    
+                    if portfolio_pos_count != risk_pos_count:
+                        print(f"      🔧 Desincronización: {abs(portfolio_pos_count - risk_pos_count)} posición(es) de diferencia")
+                        
+                        # Mostrar IDs específicos
+                        portfolio_ids = [pos.order_id for pos in portfolio_by_symbol.get(symbol, []) if pos.order_id]
+                        risk_ids = [pos.order_id for pos in risk_by_symbol.get(symbol, []) if pos.order_id]
+                        
+                        print(f"      📋 Portfolio IDs: {portfolio_ids}")
+                        print(f"      📋 Risk Manager IDs: {risk_ids}")
+            
+            # Resumen y recomendaciones
+            print(f"\n📋 RESUMEN:")
+            if risk_manager_count == portfolio_count:
+                print(f"   ✅ Sistema sincronizado correctamente")
+            else:
+                print(f"   ❌ Sistema desincronizado - Se requiere limpieza")
+                print(f"   💡 Recomendación: Ejecutar limpieza automática o reiniciar el bot")
+            
+            print("=" * 60)
+            
+        except Exception as e:
+            print(f"❌ Error en diagnóstico de sincronización: {e}")
+
+    async def _auto_cleanup_if_desynchronized(self):
+        """
+        🔧 LIMPIEZA AUTOMÁTICA DE DESINCRONIZACIÓN
+        ---
+        Se ejecuta automáticamente cuando se detecta desincronización
+        """
+        try:
+            if not self.portfolio_manager:
+                return
+                
+            risk_manager_count = len(self.active_positions)
+            portfolio_count = len(self.portfolio_manager.position_registry)
+            
+            # Solo ejecutar si hay desincronización
+            if risk_manager_count == portfolio_count:
+                return
+                
+            print(f"🔧 LIMPIEZA AUTOMÁTICA ACTIVADA por desincronización detectada")
+            print(f"   📊 Antes: Risk={risk_manager_count}, Portfolio={portfolio_count}")
+            
+            # Identificar símbolos con desincronización
+            portfolio_by_symbol = {}
+            risk_by_symbol = {}
+            
+            for pos in self.portfolio_manager.position_registry.values():
+                if pos.symbol not in portfolio_by_symbol:
+                    portfolio_by_symbol[pos.symbol] = []
+                portfolio_by_symbol[pos.symbol].append(pos)
+            
+            for pos in self.active_positions.values():
+                if pos.symbol not in risk_by_symbol:
+                    risk_by_symbol[pos.symbol] = []
+                risk_by_symbol[pos.symbol].append(pos)
+            
+            # Limpiar cada símbolo desincronizado
+            cleaned_symbols = []
+            for symbol in set(portfolio_by_symbol.keys()) | set(risk_by_symbol.keys()):
+                portfolio_pos_count = len(portfolio_by_symbol.get(symbol, []))
+                risk_pos_count = len(risk_by_symbol.get(symbol, []))
+                
+                if portfolio_pos_count != risk_pos_count:
+                    await self._cleanup_desynchronized_positions(symbol)
+                    cleaned_symbols.append(symbol)
+            
+            # Verificar resultado final
+            final_risk_count = len(self.active_positions)
+            final_portfolio_count = len(self.portfolio_manager.position_registry)
+            
+            print(f"   📊 Después: Risk={final_risk_count}, Portfolio={final_portfolio_count}")
+            
+            if final_risk_count == final_portfolio_count:
+                print(f"   ✅ LIMPIEZA AUTOMÁTICA COMPLETADA - Sincronización restaurada")
+            else:
+                print(f"   ⚠️ LIMPIEZA INCOMPLETA - Se requiere intervención manual")
+                
+        except Exception as e:
+            print(f"❌ Error en limpieza automática: {e}")
+
+    async def force_synchronization(self):
+        """
+        🔧 SINCRONIZACIÓN FORZADA DE POSICIONES
+        ---
+        Método manual para forzar la sincronización entre contadores
+        """
+        try:
+            print("🔧 SINCRONIZACIÓN FORZADA INICIADA")
+            print("=" * 50)
+            
+            if not self.portfolio_manager:
+                print("❌ Portfolio Manager no disponible")
+                return False
+                
+            # Obtener estado actual
+            risk_manager_count = len(self.active_positions)
+            portfolio_count = len(self.portfolio_manager.position_registry)
+            
+            print(f"📊 ESTADO ACTUAL:")
+            print(f"   🛡️ Risk Manager: {risk_manager_count} posiciones")
+            print(f"   💼 Portfolio Manager: {portfolio_count} posiciones")
+            
+            if risk_manager_count == portfolio_count:
+                print("✅ Sistema ya está sincronizado")
+                return True
+            
+            # Ejecutar limpieza automática
+            await self._auto_cleanup_if_desynchronized()
+            
+            # Verificar resultado final
+            final_risk_count = len(self.active_positions)
+            final_portfolio_count = len(self.portfolio_manager.position_registry)
+            
+            print(f"\n📊 RESULTADO FINAL:")
+            print(f"   🛡️ Risk Manager: {final_risk_count} posiciones")
+            print(f"   💼 Portfolio Manager: {final_portfolio_count} posiciones")
+            
+            if final_risk_count == final_portfolio_count:
+                print("✅ SINCRONIZACIÓN FORZADA COMPLETADA")
+                return True
+            else:
+                print("❌ SINCRONIZACIÓN INCOMPLETA - Se requiere reinicio")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Error en sincronización forzada: {e}")
+            return False
 
 async def main():
     """🎯 Función principal para testing directo"""
